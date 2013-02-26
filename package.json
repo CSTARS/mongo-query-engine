@@ -2,13 +2,9 @@
   "name": "MongoQueryEngine",
   "version": "0.0.1",
   "author": "Justin Merz <jrmerz@gmail.com>",
-  "description": "",
+  "description": "Restful, filter based, query engine using MongoDB",
   "dependencies" : {
-    "express"   :  "*",
-    "" :  "0.1.x",
-    "optimist" :  "0.2.x",
-    "union"    :  "0.1.x",
-    "ecstatic" :  "0.1.x",
-    "plates"   :  "https://github.com/flatiron/plates/tarball/master"
+    "express" :  "*",
+    "mongodb" :  "*"
   }
 }
