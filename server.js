@@ -12,7 +12,11 @@ if( process.argv.length < 3 ) {
 // load config and initialize engine
 try {
 	config = require(process.argv[2]);
-	queryEngine.init(config);
+	queryEngine.init(config, function(){
+		// once the database connection is made, bootstrap the webserver
+		var webserver = require(config.server.script);
+		webserver.bootstrap(express, app, queryEngine.getDatabase());
+	});
 } catch (e) {
 	console.log("failed to load config file");
 	console.log(e);
@@ -28,7 +32,22 @@ app.get('/rest/query', function(req, res){
 	});
 });
 
-app.use("/", express.static(config.server.webroot));
+app.get('/rest/get', function(req, res){
+	queryEngine.getItem(req, function(err, result){
+		if( err ) return res.send(err);
+		res.send(result);
+	});
+});
+
+//get the results of a query
+app.get('/rest/update', function(req, res){
+	queryEngine.update(function(err, results){
+		if( err ) return res.send(err);
+		res.send(results);
+	});
+});
+
+
 
 
 app.listen(config.server.port);

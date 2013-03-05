@@ -8,7 +8,7 @@ var TEXT_INDEX = "mqe_textindex";
 var MongoClient = require('mongodb').MongoClient, db, collection, cache, config;
 var ObjectId = require('mongodb').ObjectID;
 
-exports.init = function(conf) {
+exports.init = function(conf, callback) {
 	config = conf;
 	
 	if( config.debug != null ) DEBUG = config.debug;
@@ -17,6 +17,8 @@ exports.init = function(conf) {
 		if( err ) return console.log(err);
 		db = database;
 		if( DEBUG ) console.log("Connected to db: "+config.db.url);
+		
+		callback();
 		  
 		db.collection(config.db.mainCollection, function(err, coll) { 
 			if( err ) return console.log(err);
@@ -34,9 +36,13 @@ exports.init = function(conf) {
 	});
 }
 
+exports.getDatabase = function() {
+	return db;
+}
+
 exports.getResults = function(req, callback) {
 	if( !db || !collection ) callback({message:"no database connection"});
-	if( DEBUG ) console.log("===NEW REQUEST===");
+	if( DEBUG ) console.log("===NEW QUERY REQUEST===");
 	
 	var query = queryParser(req);
 	
@@ -55,6 +61,18 @@ exports.getResults = function(req, callback) {
 		} else {
 			filterQuery(query, callback);
 		}
+	});
+}
+
+exports.getItem = function(req, callback) {
+	if( !db || !collection ) callback({message:"no database connection"});
+	if( DEBUG ) console.log("===NEW ITEM REQUEST===");
+	
+	var id = req.query._id;
+	
+	collection.find({_id: ObjectId(id)}).toArray(function(err, result){
+		if( err ) callback(err);
+		callback(null, result[0]);
 	});
 }
 
@@ -173,6 +191,16 @@ function queryParser(req) {
 		if( req.query[i] ) query[i] = req.query[i];
 	}
 	
+	try {
+		if( typeof query.start == 'string' ) {
+			query.start = parseInt(query.start);
+		}
+		if( typeof query.end == 'string' ) {
+			query.end = parseInt(query.end);
+		}
+	} catch(e) {}
+	
+	
 	if( query.start < 0 ) query.start = 0;
 	if( query.end < query.start ) query.end = query.start;
 	
@@ -197,13 +225,15 @@ function queryParser(req) {
 function checkCache(query, callback) {
 	if( DEBUG ) console.log("Checking cache");
 
-	cache.find({ 'query.text': query.text, 'query.filters': query.filters }).toArray(function(err, items) {
+	cache.find({ 'query.text': query.text, 'query.filters': JSON.stringify(query.filters) }).toArray(function(err, items) {
 		if( err ) return callback(err);
 		
 		// get cached items
 		if( items.length > 0 ) {
 			if( DEBUG ) console.log("Cache Hit");
 			var cacheResult = items[0];
+			
+			cacheResult.query.filters = JSON.parse(cacheResult.query.filters);
 			
 			// get id's for the range we care about
 			var cacheItems = setLimits(query, cacheResult.items);
@@ -312,7 +342,7 @@ function handleItemsQuery(query, items, callback) {
 	response.total = items.length;
 	
 
-	response.filters = getFilters(items);
+	response.filters = getFilters(items, query.filters);
 	response.query = query;
 	response.items = items;
 	setCache(response);
@@ -333,7 +363,7 @@ function setCache(response) {
 	
 	var cacheItem = {
 		query : {
-			filters : response.query.filters,
+			filters : JSON.stringify(response.query.filters),
 			text    : response.query.text
 		},
 		items   : [],
@@ -351,7 +381,7 @@ function setCache(response) {
 }
 
 // find all filters for query
-function getFilters(items) {
+function getFilters(items, currentFilters) {
 	if( DEBUG ) console.log("Aggergating results for filter counts");
 	
 	var filters = {}, item, value;
@@ -384,6 +414,14 @@ function getFilters(items) {
 		
 	}
 	
+	// loop through and remove everything in the current query
+	for( var i = 0; i < currentFilters.length; i++ ) {
+		for( var f in currentFilters[i] ) {
+			if( filters[f] && filters[f][currentFilters[i][f]] ) delete filters[f][currentFilters[i][f]];
+		}
+	}
+	
+	
 	// now turn into array and sort by count
 	var array;
 	for( var filter in filters ) {
@@ -402,6 +440,11 @@ function getFilters(items) {
 		filters[filter] = array;
 	}
 	
+	// 	check to see if any array is empty and throw it out
+	for( var filter in filters ) {
+		if( filters[filter].length == 0 ) delete filters[filter];
+	}
+	
 	return filters;
 }
 
@@ -413,10 +456,17 @@ function setLimits(query, items) {
 	
 	var results = [];
 	for( var i = query.start; i < query.end; i++ ) {
-		// allows make sure we remove the text index
-		delete items[i][TEXT_INDEX];
 		
-		results.push(items[i]);
+		if( items[i] ) {
+			// allows make sure we remove the text index
+			if( items[i][TEXT_INDEX] ) delete items[i][TEXT_INDEX];
+			
+			results.push(items[i]);
+		} else {
+			// TODO: why would this ever be null?
+			results.push({});
+		}
+		
 		
 		// we reached the end
 		if( i-1 == items.length ) break;
