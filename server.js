@@ -1,4 +1,5 @@
 var express = require('express');
+var passport = require('passport');
 var app = express();
 var queryEngine = require('./mqe');
 var config;
@@ -9,13 +10,29 @@ if( process.argv.length < 3 ) {
 	process.exit();
 }
 
+// setup passport in case the webserver wants authentication setup
+app.configure(function() {
+	app.use(express.cookieParser()); 
+	app.use(express.bodyParser());
+	app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
+	app.use(passport.initialize());
+	app.use(passport.session());
+	app.use(app.router);
+});
+
+
 // load config and initialize engine
 try {
 	config = require(process.argv[2]);
 	queryEngine.init(config, function(){
 		// once the database connection is made, bootstrap the webserver
 		var webserver = require(config.server.script);
-		webserver.bootstrap(express, app, queryEngine.getDatabase());
+		webserver.bootstrap({
+			express: express, 
+			passport: passport,
+			app: app,
+			mqe: queryEngine
+		});
 	});
 } catch (e) {
 	console.log("failed to load config file");
@@ -47,6 +64,7 @@ app.get('/rest/update', function(req, res){
 	});
 });
 
+app.use("/mqe", express.static(__dirname+"/public"));
 
 
 
