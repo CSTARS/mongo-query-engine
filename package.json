@@ -4,8 +4,8 @@
   "author": "Justin Merz <jrmerz@gmail.com>",
   "description": "Restful, filter based, query engine using MongoDB",
   "dependencies" : {
-    "express"  :  "*",
-    "mongodb"  :  "*",
-    "passport" : "*"
+    "express"         : "*",
+    "mongodb"         : "*",
+    "passport"        : "*"
   }
 }

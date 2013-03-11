@@ -104,7 +104,7 @@ exports.update = function(callback) {
 				
 				// run imports
 				var importScript = require(config.db.importScript);
-				importScript.importData(function(err){
+				importScript.importData(db, function(err){
 					if( err ) return callback(err);
 
 					ensureIndexes(function(){
