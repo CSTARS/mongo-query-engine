@@ -432,9 +432,6 @@ function setLimits(query, items) {
 	for( var i = query.start; i < query.end; i++ ) {
 		
 		if( items[i] ) {
-			// allows make sure we remove the text index
-			if( items[i][TEXT_INDEX] ) delete items[i][TEXT_INDEX];
-			
 			results.push(items[i]);
 		} else {
 			// TODO: why would this ever be null?
