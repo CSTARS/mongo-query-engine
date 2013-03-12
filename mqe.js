@@ -3,7 +3,6 @@
  */
 
 var DEBUG = true;
-var TEXT_INDEX = "mqe_textindex";
 
 var MongoClient = require('mongodb').MongoClient, db, collection, cache, config;
 var ObjectId = require('mongodb').ObjectID;
@@ -124,39 +123,14 @@ exports.update = function(callback) {
 }
 
 function ensureIndexes(callback) {
-	// first make sure the text index is set
-	var textIndex, attr;
-	collection.find().toArray(function(err, items) {
-		if( err ) {
-			console.log("Error retrieving items for text index creation");
-			return console.log(err);
-		}
-		
-		for( var i = 0; i < items.length; i++ ) {
-			if( !items[i][TEXT_INDEX] ) {
-				// create new attribute, combination of all text fields
-				textIndex = "";
-				for( var j = 0; j < config.db.textIndexes.length; j++ ) {
-					attr = config.db.textIndexes[j];
-					if( items[i][attr] && (typeof items[i][attr] == 'string' ) ) textIndex += items[i][attr]+" ";
-				}
-				
-				var set = {$set : {}};
-				set.$set[TEXT_INDEX] = textIndex;
-				collection.update({_id: items[i]._id}, set, function(err){
-					if( err ) {
-						console.log("Failed to update on text index creation");
-						console.log(err);
-					}
-				});
-			}
-		}
-	});
 	
 	// now set the index
 	var options = {};
-	options[TEXT_INDEX] = "text";
-	collection.ensureIndex( options, function(err) {
+	for( var i = 0; i < config.db.textIndexes.length; i++ ) {
+		options[config.db.textIndexes[i]] = "text";
+	}
+	
+	collection.ensureIndex( options, { name: "TextIndex"}, function(err) {
 		if( err ) {
 			console.log("Error creating text index: ");
 			console.log(err);
