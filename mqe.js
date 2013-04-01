@@ -81,40 +81,40 @@ exports.update = function(callback) {
 	if( DEBUG ) console.log("updating database");
 	
 	try {
-		// TODO: copy collection
 		
-		// clear collection and cache
-		collection.remove(function(err) {
-			if( err ) {
-				console.log(err);
-				return callback({message:"error in update"});
-			}
+		// backup collection
+		/*db.collection(config.db.mainCollection+"_"+new Date().getTime(), function(err, backup) { 
+			if( err ) return console.log(err);
+			if( DEBUG ) console.log("Connected to collection: "+config.db.mainCollection);
 			
-			
-			console.log("collection cleared");
-			
-			cache.remove(function(err) {
-				if( err ) {
-					console.log(err);
-					return callback({message:"error in update"});
-				}
+			collection.find().toArray(function(err, result){
+				if( err ) callback(err);
 				
-				console.log("cached cleared");
-				
-				// run imports
-				var importScript = require(config.db.importScript);
-				importScript.importData(db, function(err){
-					if( err ) return callback(err);
-
-					ensureIndexes(function(){
-						callback(null); // success
-					});
+				backup.insert(result, {w:1}, function(err, result){
+					if( err ) callback(err);
 					
+					// run imports
+					var importScript = require(config.db.importScript);
+					importScript.importData(db, function(err){
+						if( err ) return callback(err);
+
+						ensureIndexes(function(){
+							callback(null); // success
+						});
+					});
 				});
-				
+			});
+		});*/
+		
+		// run imports
+		var importScript = require(config.db.importScript);
+		importScript.importData(db, function(err){
+			if( err ) return callback(err);
+
+			ensureIndexes(function(){
+				callback(null); // success
 			});
 		});
-		
 		
 	} catch (e) {
 		console.log(e);
