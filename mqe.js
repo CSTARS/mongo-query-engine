@@ -382,11 +382,19 @@ function getFilters(items, currentFilters) {
 					else filters[filter][value] = 1;
 				}
 				
+			} else if( item[filter] ) {
+				
+				value = item[filter];
+				if( filters[filter][value] ) filters[filter][value]++;
+				else filters[filter][value] = 1;
+	
 			}
 			
 		}
 		
 	}
+	
+	console.log(filters);
 	
 	// loop through and remove everything in the current query
 	for( var i = 0; i < currentFilters.length; i++ ) {
