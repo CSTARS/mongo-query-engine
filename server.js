@@ -56,7 +56,7 @@ app.get('/rest/get', function(req, res){
 	});
 });
 
-//get the results of a query
+
 app.get('/rest/update', function(req, res){
 	queryEngine.update(function(err, results){
 		if( err ) return res.send(err);

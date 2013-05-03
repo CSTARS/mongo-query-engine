@@ -6,6 +6,7 @@ var DEBUG = true;
 
 var MongoClient = require('mongodb').MongoClient, db, collection, cache, config;
 var ObjectId = require('mongodb').ObjectID;
+var extend = require('extend');
 
 exports.init = function(conf, callback) {
 	config = conf;
@@ -71,7 +72,7 @@ exports.getItem = function(req, callback) {
 	
 	collection.find({_id: ObjectId(id)}).toArray(function(err, result){
 		if( err ) callback(err);
-		callback(null, result[0]);
+		callback(null, cleanRecord(result[0]));
 	});
 }
 
@@ -208,6 +209,15 @@ function checkCache(query, callback) {
 			var cacheResult = items[0];
 			
 			cacheResult.query.filters = JSON.parse(cacheResult.query.filters);
+
+			// unescape any foo.bar filter, can't have '.' in key
+			for( var key in cacheResult.filters ) {
+				console.log(key);
+				if( key.match(/.*\:\:.*/) ) {
+					cacheResult.filters[key.replace(/::/g,'.')] = cacheResult.filters[key];
+					delete cacheResult.filters[key];
+				}
+			}
 			
 			// get id's for the range we care about
 			var cacheItems = setLimits(query, cacheResult.items);
@@ -224,6 +234,11 @@ function checkCache(query, callback) {
 				
 				collection.find(options).toArray(function(err, items) {
 					if( err ) return callback(err);
+					
+					// clear blacklist
+					for( var i = 0; i < items.length; i++ ) {
+						items[i] = cleanRecord(items[i]);
+					}
 				
 					cacheResult.items = items;
 					callback(null, cacheResult);
@@ -314,7 +329,6 @@ function handleItemsQuery(query, items, callback) {
 	
 	
 	response.total = items.length;
-	
 
 	response.filters = getFilters(items, query.filters);
 	response.query = query;
@@ -322,6 +336,11 @@ function handleItemsQuery(query, items, callback) {
 	setCache(response);
 	
 	response.items = setLimits(query, items);
+	
+	// clean out blacklist attr
+	for( var i = 0; i < response.items.length; i++ ) {
+		response.items[i] = cleanRecord(response.items[i]);
+	}
 	
 	// I know this seems backwards, but we always want to cache the filters
 	// so we run that and then remove if filters were not requested
@@ -335,13 +354,23 @@ function handleItemsQuery(query, items, callback) {
 function setCache(response) {
 	if( DEBUG ) console.log("Setting cache");
 	
+	var filters = extend(true,{},response.filters);
+	
+	// escape any foo.bar filter, can't have '.' in key
+	for( var key in filters ) {
+		if( key.match(/.*\..*/) ) {
+			filters[key.replace(/\./,"::")] = filters[key];
+			delete filters[key];
+		}
+	}
+	
 	var cacheItem = {
 		query : {
 			filters : JSON.stringify(response.query.filters),
 			text    : response.query.text
 		},
 		items   : [],
-		filters : response.filters,
+		filters : filters,
 		total   : response.total
 	};
 	
@@ -357,7 +386,7 @@ function setCache(response) {
 // find all filters for query
 function getFilters(items, currentFilters) {
 	if( DEBUG ) console.log("Aggergating results for filter counts");
-	
+
 	var filters = {}, item, value;
 	
 	// get the attributes we care about from the config file
@@ -371,38 +400,26 @@ function getFilters(items, currentFilters) {
 		
 		// for each result item, check for filters we care about
 		for( var filter in filters ) {
-			
-			// does this item have the filter and is it an array
-			if( item[filter] && (item[filter] instanceof Array)  ) {
+
+			// now see if it's a nested filter, only supporting one level
+			// and nested 
+			if ( filter.match(/.*\..*/) ) {
+				var parts = filter.split(".");
+				var subFilter = item[parts[0]];
 				
-				// loop through the filters array and increment the filters count
-				for( var j = 0; j < item[filter].length; j++ ) {
-					value = item[filter][j];
-					if( filters[filter][value] ) filters[filter][value]++;
-					else filters[filter][value] = 1;
+				if( subFilter && (subFilter instanceof Array) ) {
+					for( var j = 0; j < subFilter.length; j++ ) {
+						addFilter(filters, currentFilters, subFilter[j][parts[1]], filter);
+					}
 				}
 				
-			} else if( item[filter] ) {
-				
-				value = item[filter];
-				if( filters[filter][value] ) filters[filter][value]++;
-				else filters[filter][value] = 1;
-	
+			} else {
+				addFilter(filters, currentFilters, item[filter], filter);
 			}
 			
 		}
 		
 	}
-	
-	console.log(filters);
-	
-	// loop through and remove everything in the current query
-	for( var i = 0; i < currentFilters.length; i++ ) {
-		for( var f in currentFilters[i] ) {
-			if( filters[f] && filters[f][currentFilters[i][f]] ) delete filters[f][currentFilters[i][f]];
-		}
-	}
-	
 	
 	// now turn into array and sort by count
 	var array;
@@ -430,6 +447,48 @@ function getFilters(items, currentFilters) {
 	return filters;
 }
 
+
+function addFilter(filters, currentFilters, attrValue, filter) {
+	
+	// does this item have the filter and is it an array
+	if( attrValue && (attrValue instanceof Array)  ) {
+		
+		// loop through the filters array and increment the filters count
+		for( var j = 0; j < attrValue.length; j++ ) {
+			value = attrValue[j];
+			
+			// if it's in the current filters, ignore
+			if( hasFilter(filter, value, currentFilters) ) continue;
+			
+			// add to count
+			if( filters[filter][value] ) filters[filter][value]++;
+			else filters[filter][value] = 1;
+		}
+		
+	} else if( attrValue ) {
+
+		value = attrValue;
+		
+		// if it's in the current filters, ignore
+		if( hasFilter(filter, value, currentFilters) ) return;
+		
+		// add to count
+		if( filters[filter][value] ) filters[filter][value]++;
+		else filters[filter][value] = 1;
+
+	}
+	
+}
+
+// see if the filter/value is in the current list of filters
+function hasFilter(filter, value, currentFilters) {
+	for( var i = 0; i < currentFilters.length; i++ ) {
+		if( currentFilters[i][filter] == value ) return true;
+	}
+	return false;
+}
+
+
 // limit the result set to the start / end attr in the query
 function setLimits(query, items) {
 	if( DEBUG ) console.log("Setting query limits (start/stop)");
@@ -443,7 +502,7 @@ function setLimits(query, items) {
 			results.push(items[i]);
 		} else {
 			// TODO: why would this ever be null?
-			results.push({});
+			//results.push({});
 		}
 		
 		
@@ -452,6 +511,17 @@ function setLimits(query, items) {
 	}
 	
 	return results;
+}
+
+// clear the record of any blacklisted attributes
+function cleanRecord(item) {
+	if( !item ) return {};
+	if( !config.db.blacklist ) return item;
+	
+	for( var i = 0; i < config.db.blacklist.length; i++ ) {
+		if( item[config.db.blacklist[i]] ) delete item[config.db.blacklist[i]];
+	}
+	return item;
 }
 
 // send back and empty result set
