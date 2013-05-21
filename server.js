@@ -10,11 +10,29 @@ if( process.argv.length < 3 ) {
 	process.exit();
 }
 
+config = require(process.argv[2]);
+
+// setup cors
+var allowCrossDomain = null;
+if( config.server.allowedDomains ) {
+	allowCrossDomain = function(req, res, next) {
+		if( config.server.allowedDomains.indexOf(req.host) == -1 
+			&& config.server.allowedDomains.indexOf('*') == -1 ) return next();
+		
+		res.header('Access-Control-Allow-Origin', '*');
+	    res.header('Access-Control-Allow-Methods', 'GET,POST');
+	    res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+	    next();
+	}
+}
+
 // setup passport in case the webserver wants authentication setup
 app.configure(function() {
 	app.use(express.cookieParser()); 
 	app.use(express.bodyParser());
 	app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
+	if( allowCrossDomain ) app.use(allowCrossDomain);
 	app.use(passport.initialize());
 	app.use(passport.session());
 	app.use(app.router);
@@ -23,7 +41,6 @@ app.configure(function() {
 
 // load config and initialize engine
 try {
-	config = require(process.argv[2]);
 	queryEngine.init(config, function(){
 		// once the database connection is made, bootstrap the webserver
 		var webserver = require(config.server.script);

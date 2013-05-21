@@ -15,9 +15,11 @@ CERES.mqe = (function(){
 	var cPath = "";
 	var cQuery = null;
 	var lastSearchHash = ["search"];
+	var host = "";
 	
-	function init(default_page) {
+	function init(default_page, host_url) {
 		defaultPage = default_page;
+		host = host_url ? host_url : "";
 		
 		_parseUrl();
 		
@@ -26,7 +28,7 @@ CERES.mqe = (function(){
 		});
 		
 		$(window).bind("back-to-search-event", function(){
-			var hash = "/#";
+			var hash = "#";
 			for( var i = 0; i < lastSearchHash.length; i++ ){
 				hash += encodeURIComponent(lastSearchHash[i]);
 				if( i < lastSearchHash.length - 1 ) hash += "/";
@@ -93,7 +95,7 @@ CERES.mqe = (function(){
 		
 		cQuery = search;
 		
-		$.get('/rest/query?text='+search.text + 
+		$.get(host+'/rest/query?text='+search.text + 
 				'&filters=' + JSON.stringify(search.filters) + 
 				'&start=' + (search.page*search.itemsPerPage) +
 				'&end=' + ((search.page+1)*search.itemsPerPage) +
@@ -117,7 +119,7 @@ CERES.mqe = (function(){
 	}
 
 	function queryToUrlString(query) {
-		var hash = "/#search";
+		var hash = "#search";
 		for( var i = 0; i < HASH_SEARCH_ORDER.length; i++ ) {
 			if( query[HASH_SEARCH_ORDER[i]] != null) {
 				if( typeof query[HASH_SEARCH_ORDER[i]] == 'object' ) {

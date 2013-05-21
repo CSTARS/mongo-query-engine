@@ -5,6 +5,7 @@
   "description": "Restful, filter based, query engine using MongoDB",
   "dependencies" : {
     "express"         : "*",
+    "request"         : "*",
     "mongodb"         : "*",
     "passport"        : "*",
     "extend"          : "*"
