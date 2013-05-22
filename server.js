@@ -12,6 +12,12 @@ if( process.argv.length < 3 ) {
 
 config = require(process.argv[2]);
 
+// handle the error safely
+process.on('uncaughtException', function(err) {
+    console.log(err);
+});
+
+
 // setup cors
 var allowCrossDomain = null;
 if( config.server.allowedDomains ) {
@@ -32,6 +38,7 @@ app.configure(function() {
 	app.use(express.cookieParser()); 
 	app.use(express.bodyParser());
 	app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
+	app.use(express.logger());
 	if( allowCrossDomain ) app.use(allowCrossDomain);
 	app.use(passport.initialize());
 	app.use(passport.session());
