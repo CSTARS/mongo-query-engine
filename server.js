@@ -92,5 +92,5 @@ app.use("/mqe", express.static(__dirname+"/public"));
 
 
 
-app.listen(config.server.port);
-console.log("MQE is up and running at http://"+config.server.host+":"+config.server.port);
+app.listen(config.server.localport);
+console.log("MQE is up and running at http://"+config.server.host+":"+config.server.localport);
