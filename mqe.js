@@ -65,7 +65,7 @@ exports.getResults = function(req, callback) {
 }
 
 exports.getItem = function(req, callback) {
-	if( !db || !collection ) callback({message:"no database connection"});
+	if( !db || !collection ) return callback({message:"no database connection"});
 	if( DEBUG ) console.log("===NEW ITEM REQUEST===");
 	
 	var id = req.query._id;
