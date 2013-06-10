@@ -4,6 +4,11 @@ var app = express();
 var queryEngine = require('./mqe');
 var config;
 
+// crappy IE hacks have made it to the server!!!! 
+// man ie is horrible.  Ok, here is the issue: https://github.com/senchalabs/connect/issues/355
+// here is the fix: https://github.com/advanced/express-ie-cors, patch below
+var expressIeCors = require('express-ie-cors')({contentType: "application/x-www-form-urlencoded;charset=utf-8"});
+
 // get the config file
 if( process.argv.length < 3 ) {
 	console.log("you must provide the location of your config file");
@@ -36,6 +41,7 @@ if( config.server.allowedDomains ) {
 // setup passport in case the webserver wants authentication setup
 app.configure(function() {
 	app.use(express.cookieParser()); 
+	app.use(expressIeCors);
 	app.use(express.bodyParser());
 	app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
 	app.use(express.logger());
