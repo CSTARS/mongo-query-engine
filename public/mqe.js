@@ -95,8 +95,9 @@ CERES.mqe = (function(){
 		
 		cQuery = search;
 		
+		console.log(search);
 		$.get(host+'/rest/query?text='+search.text + 
-				'&filters=' + JSON.stringify(search.filters) + 
+				'&filters=' + encodeURIComponent(JSON.stringify(search.filters)) + 
 				'&start=' + (search.page*search.itemsPerPage) +
 				'&end=' + ((search.page+1)*search.itemsPerPage) +
 				'&includeFilters=true',
