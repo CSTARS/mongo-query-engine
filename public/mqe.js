@@ -38,7 +38,14 @@ CERES.mqe = (function(){
 	}
 	
 	function _parseUrl() {
-		var hash = window.location.hash.replace("#",'');
+		// FF returns the hash as unescaped text, so the splits
+		// later on break :/ boooo, appears to work if you manually find the hash
+		//var hash = window.location.hash.replace("#",'');
+		var hash = null;
+		if( window.location.href.match(/.*#.*/) ) {
+			hash = window.location.href.split("#")[1];
+		}
+		
 		if( !hash ) hash = defaultPage;
 		
 		var parts = hash.split("/");
@@ -95,7 +102,6 @@ CERES.mqe = (function(){
 		
 		cQuery = search;
 		
-		console.log(search);
 		$.get(host+'/rest/query?text='+search.text + 
 				'&filters=' + encodeURIComponent(JSON.stringify(search.filters)) + 
 				'&start=' + (search.page*search.itemsPerPage) +
