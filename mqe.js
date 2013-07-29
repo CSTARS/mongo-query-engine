@@ -281,6 +281,9 @@ function textQuery(query, callback) {
 		
 		var items = [];
 		for( var i = 0; i < resp.documents[0].results.length; i++ ) {
+			if( config.db.useMongoTextScore ) {
+				resp.documents[0].results[i].obj.mongo_text_score = resp.documents[0].results[i].score; 
+			}
 			items.push(resp.documents[0].results[i].obj);
 		}
 		
@@ -320,12 +323,33 @@ function handleItemsQuery(query, items, callback) {
 		return sendEmptyResultSet(query, callback);
 	}
 	
+	if( config.db.useMongoTextScore ) {
+		
+		var factor = config.db.mongoTextScoreFactor;
+		if( !factor ) factor = 50;
+		
+		for( var i = 0; i < items.length; i++ ) {
+			if( items[i].mongo_text_score == null ) items[i].mongo_text_score = 0;
+			if( items[i][config.db.sortBy] == null ) items[i][config.db.sortBy] = 0;
+			items[i][config.db.sortBy] = items[i][config.db.sortBy] + (items[i].mongo_text_score * factor );
+		}
+	}
+	
 	// sort items
-	items.sort(function(a,b) {
-		if( a[config.db.sortBy] < b[config.db.sortBy] ) return -1;
-		if( a[config.db.sortBy] > b[config.db.sortBy] ) return 1;
-		return 0;
-	});
+	if( config.db.sortBy && config.db.sortOrder == "desc" ) {
+		items.sort(function(a,b) {
+			if( a[config.db.sortBy] > b[config.db.sortBy] ) return -1;
+			if( a[config.db.sortBy] < b[config.db.sortBy] ) return 1;
+			return 0;
+		});
+	} else if ( config.db.sortBy ) {
+		items.sort(function(a,b) {
+			if( a[config.db.sortBy] < b[config.db.sortBy] ) return -1;
+			if( a[config.db.sortBy] > b[config.db.sortBy] ) return 1;
+			return 0;
+		});
+	}
+	
 	
 	
 	response.total = items.length;
