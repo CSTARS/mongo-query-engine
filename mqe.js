@@ -124,9 +124,22 @@ exports.update = function(callback) {
 }
 
 function ensureIndexes(callback) {
+	var options = {};
+	
+	// create geo index
+	if( config.db.geoIndex ) {
+		options[config.db.geoIndex] = "2dsphere";
+		collection.ensureIndex( options, { w: 1}, function(err) {
+			if( err ) {
+				console.log("Error creating geo index: ");
+				console.log(err);
+			}
+		});
+	}
+	
 	
 	// now set the index
-	var options = {};
+	options = {};
 	for( var i = 0; i < config.db.textIndexes.length; i++ ) {
 		options[config.db.textIndexes[i]] = "text";
 	}
@@ -267,7 +280,23 @@ function textQuery(query, callback) {
 		limit  : 100000
 	};
 	
-	if( query.filters.length > 0 ) command.filter = { $and : query.filters }
+	if( query.filters.length > 0 ) {
+		command.filter = {};
+		
+		// set geo filter if it exits 
+		// if so, remove from $and array and set as top level filter option
+		if( config.db.geoFilter ) {
+			for( var i = 0; i < query.filters.length; i++ ) {
+				if( query.filters[i][config.db.geoFilter] ) {
+					command.filter[config.db.geoFilter] = query.filters[i][config.db.geoFilter];
+					query.filters.splice(i, 1);
+					break;
+				}
+			}
+		}
+		
+		if( query.filters.length > 0 )  command.filter["$and"] = query.filters;
+	}
 	
 	if( DEBUG ) console.log(command);
 	
@@ -296,11 +325,24 @@ function filterQuery(query, callback) {
 	if( DEBUG ) console.log("Running filters only query: ");
 	
 	var options = {}
+	
+	// set geo filter if it exits 
+	// if so, remove from $and array and set as top level filter option
+	if( config.db.geoFilter ) {
+		for( var i = 0; i < query.filters.length; i++ ) {
+			if( query.filters[i][config.db.geoFilter] ) {
+				options[config.db.geoFilter] = query.filters[i][config.db.geoFilter];
+				query.filters.splice(i, 1);
+				break;
+			}
+		}
+	}
+	
 	if( query.filters.length > 0 ) options["$and"] = query.filters;
 	
 	if( DEBUG ) console.log(options);
 
-	collection.find(options).toArray(function(err, items) {
+	collection.find(options).limit(100000).toArray(function(err, items) {
 		if( err ) return callback(err);
 		
 		handleItemsQuery(query, items, callback);
