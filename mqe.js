@@ -67,10 +67,15 @@ exports.getResults = function(req, callback) {
 exports.getItem = function(req, callback) {
 	if( !db || !collection ) return callback({message:"no database connection"});
 	if( DEBUG ) console.log("===NEW ITEM REQUEST===");
+
+	// take the first query parameter and retrieve and item by the id;
+	var options = {};
+	for( var key in req.query ) {
+		if( key == "_id" ) options._id = ObjectId(id);
+		else options[key] = req.query[key];
+	}
 	
-	var id = req.query._id;
-	
-	collection.find({_id: ObjectId(id)}).toArray(function(err, result){
+	collection.find(options).toArray(function(err, result){
 		if( err ) callback(err);
 		callback(null, cleanRecord(result[0]));
 	});

@@ -1,4 +1,4 @@
-var CERES = {};
+if( !window.CERES ) window["CERES"] = {};
 
 CERES.mqe = (function(){
 	
@@ -16,10 +16,27 @@ CERES.mqe = (function(){
 	var cQuery = null;
 	var lastSearchHash = ["search"];
 	var host = "";
+	var resultPage = "result";
+	var resultQueryParameter = "_id";
 	
-	function init(default_page, host_url) {
-		defaultPage = default_page;
-		host = host_url ? host_url : "";
+	/**
+	 * options
+	 * 
+	 *  defaultPage - where to take user if no or unknown page is provided
+	 *  hostUrl - if app is launched cross domain, this tells us where to query
+	 *  resultPage - Default (result).  url location of result page
+	 *  resultQueryParameter - Default (_id).  Unique parameter to retrive item by
+	 * 
+	 * */
+	function init(options) {
+		if( typeof options == "string" ) {
+			return alert("mqe.js options should be a an object.");
+		}
+		
+		defaultPage = options.defaultPage;
+		host = options.hostUrl ? options.hostUrl : "";
+		if( options.resultPage ) resultPage = options.resultPage;
+		if( options.resultQueryParameter ) resultQueryParameter = options.resultQueryParameter;
 		
 		_parseUrl();
 		
@@ -63,7 +80,7 @@ CERES.mqe = (function(){
 	function _updatePageContent(hash) {
 		if ( cPage == "search" ) {
 			_updateSearch(hash);
-		} else if ( cPage == "result" ) {
+		} else if ( cPage == resultPage ) {
 			_updateResult(hash);
 		}
 	}
@@ -72,7 +89,8 @@ CERES.mqe = (function(){
 		// set this for the back button
 		lastSearchHash = hash;
 		
-		var search = $.extend({}, DEFAULT_SEARCH);
+
+		var search = $.extend(true, {}, DEFAULT_SEARCH);
 		
 		for( var i = 1; i < hash.length; i++ ) {
 			if( hash[i].length > 0 ) {
@@ -88,6 +106,20 @@ CERES.mqe = (function(){
 			console.log(e);
 		}
 		
+		for( var i = 0; i < DEFAULT_SEARCH.filters.length; i++ ) {
+			var f = DEFAULT_SEARCH.filters[i];
+			var key = "";
+			for( key in f ) break;
+			
+			var found = false;
+			for( var j = 0; j < search.filters.length; j++ ) {
+				if( search.filters[j][key] == f[key] ) {
+					found = true;
+					break;
+				}
+			}
+			if( !found ) search.filters.push(f);
+		}
 		
 		try {
 			if( typeof search.page == 'string' ) {
@@ -114,17 +146,30 @@ CERES.mqe = (function(){
 	}
 	
 	function _updateResult(hash) {
-		$.get(host+'/rest/get?_id='+hash[1],
+		$.get(host+'/rest/get?'+resultQueryParameter+'='+hash[1],
 			function(data) {
 				$(window).trigger("result-update-event",[data]);  
 			}
 		);
+	}
+
+	function setDefaultFilter(filter) {
+		DEFAULT_SEARCH.filters.push(filter);
+	}
+	
+	
+	function getDefaultQuery() {
+		return $.extend(true, {}, DEFAULT_SEARCH);
 	}
 	
 	function getCurrentQuery() {
 		return $.extend(true, {}, cQuery);
 	}
 
+	function getResultPage() {
+		return resultPage;
+	}
+	
 	function queryToUrlString(query) {
 		var hash = "#search";
 		for( var i = 0; i < HASH_SEARCH_ORDER.length; i++ ) {
@@ -145,7 +190,10 @@ CERES.mqe = (function(){
 	return {
 		init : init,
 		queryToUrlString : queryToUrlString,
-		getCurrentQuery : getCurrentQuery
+		getCurrentQuery : getCurrentQuery,
+		getDefaultQuery : getDefaultQuery,
+		getResultPage : getResultPage,
+		setDefaultFilter : setDefaultFilter
 	};
 	
 })();
