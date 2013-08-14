@@ -81,53 +81,6 @@ exports.getItem = function(req, callback) {
 	});
 }
 
-exports.update = function(callback) {
-	if( !config ) return callback({message:"init has not been call"});
-	
-	if( DEBUG ) console.log("updating database");
-	
-	try {
-		
-		// backup collection
-		/*db.collection(config.db.mainCollection+"_"+new Date().getTime(), function(err, backup) { 
-			if( err ) return console.log(err);
-			if( DEBUG ) console.log("Connected to collection: "+config.db.mainCollection);
-			
-			collection.find().toArray(function(err, result){
-				if( err ) callback(err);
-				
-				backup.insert(result, {w:1}, function(err, result){
-					if( err ) callback(err);
-					
-					// run imports
-					var importScript = require(config.db.importScript);
-					importScript.importData(db, function(err){
-						if( err ) return callback(err);
-
-						ensureIndexes(function(){
-							callback(null); // success
-						});
-					});
-				});
-			});
-		});*/
-		
-		// run imports
-		var importScript = require(config.db.importScript);
-		importScript.importData(db, function(err){
-			if( err ) return callback(err);
-
-			ensureIndexes(function(){
-				callback(null); // success
-			});
-		});
-		
-	} catch (e) {
-		console.log(e);
-		return callback({message:"error in update"});
-	}
-}
-
 function ensureIndexes(callback) {
 	var options = {};
 	
@@ -144,12 +97,19 @@ function ensureIndexes(callback) {
 	
 	
 	// now set the index
-	options = {};
+	options = {};	
 	for( var i = 0; i < config.db.textIndexes.length; i++ ) {
 		options[config.db.textIndexes[i]] = "text";
 	}
 	
-	collection.ensureIndex( options, { name: "TextIndex"}, function(err) {
+	var options2 = {
+			name : "MqeTextIndex"
+	};
+	if( config.db.textIndexWeights ) {
+		options2.weights = config.db.textIndexWeights;
+	}
+	
+	collection.ensureIndex( options, options2, function(err) {
 		if( err ) {
 			console.log("Error creating text index: ");
 			console.log(err);

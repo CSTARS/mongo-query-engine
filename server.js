@@ -86,19 +86,7 @@ app.get('/rest/get', function(req, res){
 	});
 });
 
-
-app.get('/rest/update', function(req, res){
-	
-	if( !config.db.allowUpdates ) return res.send({error:true,message:"Not Allowed"});
-	
-	queryEngine.update(function(err, results){
-		if( err ) return res.send(err);
-		res.send(results);
-	});
-});
-
 app.use("/mqe", express.static(__dirname+"/public"));
-
 
 
 app.listen(config.server.localport);
