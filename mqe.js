@@ -338,6 +338,7 @@ function handleItemsQuery(query, items, callback) {
 		for( var i = 0; i < items.length; i++ ) {
 			if( items[i].mongo_text_score == null ) items[i].mongo_text_score = 0;
 			if( items[i][config.db.sortBy] == null ) items[i][config.db.sortBy] = 0;
+			items[i]["_original"+config.db.sortBy] = items[i][config.db.sortBy];
 			items[i][config.db.sortBy] = items[i][config.db.sortBy] + (items[i].mongo_text_score * factor );
 		}
 	}
