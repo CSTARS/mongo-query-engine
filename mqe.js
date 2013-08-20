@@ -85,8 +85,8 @@ function ensureIndexes(callback) {
 	var options = {};
 	
 	// create geo index
-	if( config.db.geoIndex ) {
-		options[config.db.geoIndex] = "2dsphere";
+	if( config.db.geoFilter ) {
+		options[config.db.geoFilter] = "2dsphere";
 		collection.ensureIndex( options, { w: 1}, function(err) {
 			if( err ) {
 				console.log("Error creating geo index: ");
