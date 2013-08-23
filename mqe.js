@@ -71,7 +71,7 @@ exports.getItem = function(req, callback) {
 	// take the first query parameter and retrieve and item by the id;
 	var options = {};
 	for( var key in req.query ) {
-		if( key == "_id" ) options._id = ObjectId(id);
+		if( key == "_id" ) options._id = ObjectId(req.query._id);
 		else options[key] = req.query[key];
 	}
 	
