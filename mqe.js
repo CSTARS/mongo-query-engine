@@ -241,7 +241,7 @@ function textQuery(query, callback) {
 	
 	var command = {
 		text: config.db.mainCollection,  
-		search : query.text,
+		search : query.text.toLowerCase(),
 		limit  : 100000
 	};
 	
