@@ -22,6 +22,11 @@ process.on('uncaughtException', function(err) {
     console.log(err);
 });
 
+//include auth model
+var auth;
+if( config.auth ) {
+    auth = require(config.auth.script);
+}
 
 // setup cors
 var allowCrossDomain = null;
@@ -46,8 +51,13 @@ app.configure(function() {
 	app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
 	app.use(express.logger());
 	if( allowCrossDomain ) app.use(allowCrossDomain);
+	
 	app.use(passport.initialize());
 	app.use(passport.session());
+	
+	// set the auth endpoints
+	if( config.auth ) auth.init(app, passport, config);
+	
 	app.use(app.router);
 });
 
@@ -69,6 +79,9 @@ try {
 	console.log(e);
 	process.exit();
 }
+
+// set auth endpoints
+if( config.auth ) auth.setEndpoints(app, passport, config);
 
 
 // get the results of a query
