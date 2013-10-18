@@ -68,11 +68,11 @@ CERES.mqe = (function(){
 		var parts = hash.split("/");
 		for( var i = 0; i < parts.length; i++ ) parts[i] = decodeURIComponent(parts[i]);
 		
-		_updatePageContent(parts);
-		
 		$(window).trigger("page-update-event", [parts]);
 		
 		cPage = parts[0];
+		
+		_updatePageContent(parts);
 	}
 	
 
