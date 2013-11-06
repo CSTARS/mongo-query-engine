@@ -99,6 +99,16 @@ app.get('/rest/get', function(req, res){
 	});
 });
 
+// return xml sitemap for all urls
+app.get('/rest/sitemap', function(req, res){
+	queryEngine.getSitemap(req, function(result){
+		if( result.error ) return res.send(result);
+		res.set('Content-Type', 'text/xml; charset=utf-8');
+		res.send(result.xml);
+	});
+});
+
+// serve the mqe js
 app.use("/mqe", express.static(__dirname+"/public"));
 
 

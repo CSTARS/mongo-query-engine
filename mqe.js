@@ -65,7 +65,7 @@ exports.getResults = function(req, callback) {
 }
 
 exports.getItem = function(req, callback) {
-	if( !db || !collection ) return callback({message:"no database connection"});
+	if( !db || !collection ) return callback({error: true, message:"no database connection"});
 	if( DEBUG ) console.log("===NEW ITEM REQUEST===");
 
 	// take the first query parameter and retrieve and item by the id;
@@ -76,8 +76,43 @@ exports.getItem = function(req, callback) {
 	}
 	
 	collection.find(options).toArray(function(err, result){
-		if( err ) callback(err);
+		if( err ) return callback(err);
 		callback(null, cleanRecord(result[0]));
+	});
+}
+
+exports.getSitemap = function(req, callback) {
+	if( !db || !collection ) return callback({error:true, message:"no database connection"});
+
+	var host = req.query.host;
+	var id = req.query.id;
+	if( !host ) return callback({error:true, message:"no host provided"});
+	if( !id ) id = "_id";
+
+	options = {title:1};
+	options[id] = 1;
+
+	collection.find({},options).toArray(function(err, items){
+		if( err ) return callback(err);
+		if( !items ) return callback({error:true,message:"Bad response from query"});
+
+		var xml = '<?xml version="1.0" encoding="UTF-8"?>'+
+				  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
+					'<url>'+
+    					'<loc>'+host+'</loc>'+
+    					'<changefreq>daily</changefreq>'+
+    					'<priority>0.8</priority>'+
+					'</url>';
+
+		for( var i = 0; i < items.length; i++ ) {
+			xml += '<url>'+
+						'<loc>'+host+'#lp/'+items[i][id]+'</loc>'+
+    					'<changefreq>daily</changefreq>'+
+    				'</url>';
+		}
+		xml += '</urlset>';
+
+		callback({xml:xml});
 	});
 }
 
@@ -87,11 +122,17 @@ function ensureIndexes(callback) {
 	// create geo index
 	if( config.db.geoFilter ) {
 		options[config.db.geoFilter] = "2dsphere";
-		collection.ensureIndex( options, { w: 1}, function(err) {
-			if( err ) {
-				console.log("Error creating geo index: ");
-				console.log(err);
-			}
+		
+		// drop index
+		// TODO: there should be a force option for this
+		collection.dropIndex(options, function(){
+			// rebuild index
+			collection.ensureIndex( options, { w: 1}, function(err) {
+				if( err ) {
+					console.log("Error creating geo index: ");
+					console.log(err);
+				}
+			});
 		});
 	}
 	
@@ -109,12 +150,15 @@ function ensureIndexes(callback) {
 		options2.weights = config.db.textIndexWeights;
 	}
 	
-	collection.ensureIndex( options, options2, function(err) {
-		if( err ) {
-			console.log("Error creating text index: ");
-			console.log(err);
-		}
+	collection.dropIndex("MqeTextIndex", function(){
+		collection.ensureIndex( options, options2, function(err) {
+			if( err ) {
+				console.log("Error creating text index: ");
+				console.log(err);
+			}
+		});
 	});
+	
 	
 	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
 		options = {};
