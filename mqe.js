@@ -117,17 +117,17 @@ exports.getSitemap = function(req, callback) {
 }
 
 function ensureIndexes(callback) {
-	var options = {};
+	var options1 = {};
 	
 	// create geo index
 	if( config.db.geoFilter ) {
-		options[config.db.geoFilter] = "2dsphere";
+		options1[config.db.geoFilter] = "2dsphere";
 		
 		// drop index
 		// TODO: there should be a force option for this
-		collection.dropIndex(options, function(){
+		collection.dropIndex(options1, function(){
 			// rebuild index
-			collection.ensureIndex( options, { w: 1}, function(err) {
+			collection.ensureIndex( options1, { w: 1}, function(err) {
 				if( err ) {
 					console.log("Error creating geo index: ");
 					console.log(err);
@@ -138,20 +138,21 @@ function ensureIndexes(callback) {
 	
 	
 	// now set the index
-	options = {};	
+	var options2 = {};	
 	for( var i = 0; i < config.db.textIndexes.length; i++ ) {
-		options[config.db.textIndexes[i]] = "text";
+		options2[config.db.textIndexes[i]] = "text";
 	}
 	
-	var options2 = {
+	var options3 = {
 			name : "MqeTextIndex"
 	};
 	if( config.db.textIndexWeights ) {
-		options2.weights = config.db.textIndexWeights;
+		options3.weights = config.db.textIndexWeights;
 	}
 	
-	collection.dropIndex("MqeTextIndex", function(){
-		collection.ensureIndex( options, options2, function(err) {
+	collection.dropIndex("MqeTextIndex", function(err, result){
+		collection.ensureIndex( options2, options3, function(err, result) {
+
 			if( err ) {
 				console.log("Error creating text index: ");
 				console.log(err);
@@ -161,9 +162,9 @@ function ensureIndexes(callback) {
 	
 	
 	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
-		options = {};
-		options[config.db.indexedFilters[i]] = 1;
-		collection.ensureIndex( options, function(err) {
+		var options4 = {};
+		options4[config.db.indexedFilters[i]] = 1;
+		collection.ensureIndex( options4, function(err) {
 			if( err ) {
 				console.log("Error creating index: ");
 				console.log(err);
