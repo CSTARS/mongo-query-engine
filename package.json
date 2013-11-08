@@ -9,6 +9,7 @@
     "mongodb"         : "*",
     "passport"        : "*",
     "extend"          : "*",
-    "express-ie-cors" : "*"
+    "express-ie-cors" : "*",
+    "zombie"          : "*"
   }
 }

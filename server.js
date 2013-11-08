@@ -1,5 +1,6 @@
 var express = require('express');
 var passport = require('passport');
+var Browser = require("zombie");
 var app = express();
 var queryEngine = require('./mqe');
 var config;
@@ -105,6 +106,50 @@ app.get('/rest/sitemap', function(req, res){
 		if( result.error ) return res.send(result);
 		res.set('Content-Type', 'text/xml; charset=utf-8');
 		res.send(result.xml);
+	});
+});
+
+app.get('/static/lp/*', function(req, res){
+
+	var parts = req.path.replace(/\/static\/lp\//,"").split("/");
+
+	function ready(html) {
+		// remove all script tags
+		browser.window.$("script").remove();
+		var ele;
+
+		// change all css links
+		var links = browser.window.$("link");
+		for( var i = 0; i < links.length; i++ ) {
+			ele = browser.window.$(links[i]);
+			ele.attr("href", "../../"+ele.attr("href"));
+		}
+
+		// change all anchors for search
+		var links = browser.window.$("a");
+		for( var i = 0; i < links.length; i++ ) {
+			ele = browser.window.$(links[i]);
+			if( ele.attr("href") && ele.attr("href").match("#search.*") ) {
+				ele.attr("href", "../../"+ele.attr("href"));
+			}
+		}
+
+		// insert redirect
+		var html = browser.html();
+		browser.close();
+		delete browser;
+		res.send(html);
+	}
+	browser = new Browser();
+	browser.visit("http://"+config.server.host+(config.server.hostport ? ":"+config.server.hostport : "")
+		+ "/#lp/" + parts[0], function () {
+		if( browser.window.CERES.mqe._lploaded ) {
+			ready();
+		} else {
+			browser.window.CERES.mqe.lpready = function() {
+				ready();
+			};
+		}
 	});
 });
 

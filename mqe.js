@@ -106,7 +106,7 @@ exports.getSitemap = function(req, callback) {
 
 		for( var i = 0; i < items.length; i++ ) {
 			xml += '<url>'+
-						'<loc>'+host+'#lp/'+items[i][id]+'</loc>'+
+						'<loc>'+host+'/static/lp/'+items[i][id]+'</loc>'+
     					'<changefreq>daily</changefreq>'+
     				'</url>';
 		}
