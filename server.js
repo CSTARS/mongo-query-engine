@@ -143,10 +143,11 @@ app.get('/static/lp/*', function(req, res){
 		res.send(html);
 	}
 
-	console.log("STATIC REQUEST: "+host + "#lp/" + parts[0]);
+	var localhost = "http://"+config.server.host;
+	console.log("STATIC REQUEST: "+ locahost + "/#lp/" + parts[0]);
 
 	browser = new Browser();
-	browser.visit(host + "#lp/" + parts[0], function () {
+	browser.visit( localhost + "/#lp/" + parts[0], function () {
 		if( browser.window.CERES.mqe._lploaded ) {
 			ready();
 		} else {
