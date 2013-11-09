@@ -110,7 +110,7 @@ app.get('/rest/sitemap', function(req, res){
 });
 
 app.get('/static/lp/*', function(req, res){
-
+	var host = req.query.host;
 	var parts = req.path.replace(/\/static\/lp\//,"").split("/");
 
 	function ready(html) {
@@ -136,13 +136,14 @@ app.get('/static/lp/*', function(req, res){
 
 		// insert redirect
 		var html = browser.html();
+		html = html.replace("</head>","<script type='text/javascript'>window.location='"+host+"#lp/"+parts[0]+"'</script>\n</head>");
+
 		browser.close();
 		delete browser;
 		res.send(html);
 	}
 	browser = new Browser();
-	browser.visit("http://"+config.server.host+(config.server.hostport ? ":"+config.server.hostport : "")
-		+ "/#lp/" + parts[0], function () {
+	browser.visit(host + "/#lp/" + parts[0], function () {
 		if( browser.window.CERES.mqe._lploaded ) {
 			ready();
 		} else {
