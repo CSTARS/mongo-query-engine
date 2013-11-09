@@ -44,6 +44,15 @@ if( config.server.allowedDomains ) {
 	}
 }
 
+
+// middleware to handle _escaped_fragment_ requests
+// this allows google and (others?) to crawl mqe sites
+// https://support.google.com/webmasters/answer/174992?hl=en
+var escapedFragments = function(req, res, next) {
+	if( !req.query._escaped_fragment_ ) return next();
+	generateStaticSnapshot(req, res);
+}
+
 // setup passport in case the webserver wants authentication setup
 app.configure(function() {
 	app.use(express.cookieParser()); 
@@ -56,6 +65,8 @@ app.configure(function() {
 	app.use(passport.initialize());
 	app.use(passport.session());
 	
+	app.use(escapedFragments);
+
 	// set the auth endpoints
 	if( config.auth ) auth.init(app, passport, config);
 	
@@ -109,54 +120,45 @@ app.get('/rest/sitemap', function(req, res){
 	});
 });
 
-app.get('/static/lp/*', function(req, res){
-	var host = req.query.host;
-	var parts = req.path.replace(/\/static\/lp\//,"").split("/");
+function generateStaticSnapshot(req, res) {
 
-	function ready(html) {
+	function ready() {
+		
 		// remove all script tags
 		browser.window.$("script").remove();
-		var ele;
 
-		// change all css links
-		var links = browser.window.$("link");
-		for( var i = 0; i < links.length; i++ ) {
-			ele = browser.window.$(links[i]);
-			ele.attr("href", "../../"+ele.attr("href"));
-		}
-
-		// change all anchors for search
-		var links = browser.window.$("a");
-		for( var i = 0; i < links.length; i++ ) {
-			ele = browser.window.$(links[i]);
-			if( ele.attr("href") && ele.attr("href").match("#search.*") ) {
-				ele.attr("href", "../../"+ele.attr("href"));
-			}
-		}
-
-		// insert redirect
 		var html = browser.html();
-		html = html.replace("</head>","<script type='text/javascript'>window.location='"+host+"#lp/"+parts[0]+"'</script>\n</head>");
 
 		browser.close();
 		delete browser;
 		res.send(html);
 	}
 
-	var localhost = "http://"+config.server.host;
-	console.log("STATIC REQUEST: "+ localhost + "/#lp/" + parts[0]);
+	var url = "http://"+config.server.host;
+	if( !url.match(/\/?/) ) url += "/";
+	url = url+"/#"+req.query._escaped_fragment_;
 
+	console.log("STATIC REQUEST: "+ url);
 	browser = new Browser();
-	browser.visit( localhost + "/#lp/" + parts[0], function () {
-		if( browser.window.CERES.mqe._lploaded ) {
-			ready();
-		} else {
-			browser.window.CERES.mqe.lpready = function() {
+	try {
+		browser.visit(url, function () {
+			console.log("here");
+			if( browser.window.CERES.mqe._lploaded ) {
 				ready();
-			};
-		}
-	});
-});
+			} else {
+				browser.window.CERES.mqe.lpready = function() {
+					ready();
+				};
+			}
+		});
+	} catch (e) {
+		browser.close();
+		delete browser;
+		res.send(404);
+	}
+
+}
+
 
 // serve the mqe js
 app.use("/mqe", express.static(__dirname+"/public"));

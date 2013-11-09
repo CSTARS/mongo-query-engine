@@ -96,6 +96,8 @@ exports.getSitemap = function(req, callback) {
 		if( err ) return callback(err);
 		if( !items ) return callback({error:true,message:"Bad response from query"});
 
+		if( !host.match(/\/$/) ) host = host + "/";
+
 		var xml = '<?xml version="1.0" encoding="UTF-8"?>'+
 				  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
 					'<url>'+
@@ -106,7 +108,7 @@ exports.getSitemap = function(req, callback) {
 
 		for( var i = 0; i < items.length; i++ ) {
 			xml += '<url>'+
-						'<loc>'+host+'static/lp/'+items[i][id]+'?host='+encodeURIComponent(host)+'</loc>'+
+						'<loc>'+host+'#!lp/'+items[i][id]+'</loc>'+
     					'<changefreq>daily</changefreq>'+
     				'</url>';
 		}

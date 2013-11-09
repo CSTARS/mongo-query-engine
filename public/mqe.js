@@ -60,7 +60,8 @@ CERES.mqe = (function(){
 		//var hash = window.location.hash.replace("#",'');
 		var hash = null;
 		if( window.location.href.match(/.*#.*/) ) {
-			hash = window.location.href.split("#")[1];
+			// if we are using the ajax crawlable #!, make sure we clear it
+			hash = window.location.href.split("#")[1].replace(/^!/,"");
 		}
 		
 		if( !hash ) hash = defaultPage;
