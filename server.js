@@ -144,7 +144,7 @@ app.get('/static/lp/*', function(req, res){
 	}
 
 	var localhost = "http://"+config.server.host;
-	console.log("STATIC REQUEST: "+ locahost + "/#lp/" + parts[0]);
+	console.log("STATIC REQUEST: "+ localhost + "/#lp/" + parts[0]);
 
 	browser = new Browser();
 	browser.visit( localhost + "/#lp/" + parts[0], function () {
