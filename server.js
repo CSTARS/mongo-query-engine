@@ -143,7 +143,7 @@ app.get('/static/lp/*', function(req, res){
 		res.send(html);
 	}
 	browser = new Browser();
-	browser.visit(host + "/#lp/" + parts[0], function () {
+	browser.visit(host + "#lp/" + parts[0], function () {
 		if( browser.window.CERES.mqe._lploaded ) {
 			ready();
 		} else {
