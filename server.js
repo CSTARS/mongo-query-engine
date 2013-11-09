@@ -142,6 +142,9 @@ app.get('/static/lp/*', function(req, res){
 		delete browser;
 		res.send(html);
 	}
+
+	console.log("STATIC REQUEST: "+host + "#lp/" + parts[0]);
+
 	browser = new Browser();
 	browser.visit(host + "#lp/" + parts[0], function () {
 		if( browser.window.CERES.mqe._lploaded ) {
