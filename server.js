@@ -56,6 +56,7 @@ var escapedFragments = function(req, res, next) {
 
 // setup passport in case the webserver wants authentication setup
 app.configure(function() {
+	app.use(express.compress());
 	app.use(express.cookieParser()); 
 	app.use(expressIeCors);
 	app.use(express.bodyParser());
