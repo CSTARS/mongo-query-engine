@@ -7,6 +7,7 @@ var DEBUG = true;
 var MongoClient = require('mongodb').MongoClient, db, collection, cache, config;
 var ObjectId = require('mongodb').ObjectID;
 var extend = require('extend');
+var LIMIT = 100000;
 
 exports.init = function(conf, callback) {
 	config = conf;
@@ -211,7 +212,6 @@ function queryParser(req) {
 	} catch (e) {
 		// TODO: how do we want to handle this
 		query.filters = [];
-		console.log(e);
 	}
 
 	if( !(query.filters instanceof Array) ) {
@@ -238,7 +238,6 @@ function checkCache(query, callback) {
 
 			// unescape any foo.bar filter, can't have '.' in key
 			for( var key in cacheResult.filters ) {
-				console.log(key);
 				if( key.match(/.*\:\:.*/) ) {
 					cacheResult.filters[key.replace(/::/g,'.')] = cacheResult.filters[key];
 					delete cacheResult.filters[key];
@@ -290,7 +289,7 @@ function textQuery(query, callback) {
 	var command = {
 		text: config.db.mainCollection,  
 		search : query.text.toLowerCase(),
-		limit  : 100000
+		limit  : LIMIT
 	};
 	
 	if( query.filters.length > 0 ) {
@@ -355,12 +354,92 @@ function filterQuery(query, callback) {
 	
 	if( DEBUG ) console.log(options);
 
-	collection.find(options).limit(100000).toArray(function(err, items) {
+	// going from mongo to json is VERY slow.  And when you return everything it's even slower
+	// Here is the fix for now.
+	//    - call full query only on selected range
+	//    - query all items only returning filters and run counts
+	//    - respond to client
+	//    - now run full query and cache
+	var response = {
+		total   : 0,
+		start   : query.start,
+		end     : query.end,
+		items   : [],
+		filters : {}
+	}
+
+	filterCounts(options, query, function(err, total, filters){
 		if( err ) return callback(err);
-		
-		handleItemsQuery(query, items, callback);
+
+		response.total = total;
+		response.filters = filters;
+
+		rangedQuery(options, query, function(err, items){
+			if( err ) return callback(err);
+
+			response.items = items;
+			callback(null, response);
+
+			// now run entire query so we can cache
+			collection.find(options).limit(LIMIT).toArray(function(err, items) {
+				handleItemsQuery(query, items);
+			});
+		});
+	})
+
+}
+
+// find a sorted range of responsed without returned the entire dataset
+function rangedQuery(options, query, callback) {
+	var filters = {};
+	if( config.db.sortBy ) filters[config.db.sortBy] = 1;
+
+	// query all items, but only return the sort field
+	collection.find(options, filters).limit(LIMIT).toArray(function(err, items) {
+		if( err ) return callback(err);
+
+		// sort items
+		sortItems(items);
+
+		// now get the items we need (all info)
+		var ids = [];
+		for( var i = query.start; i < query.end; i++ ) {
+			if( i >= items.length ) break;
+			ids.push(items[i]._id);
+		}
+
+		// now grab all the data for just the returned id's
+		collection.find({ _id : { $in : ids }}).limit(LIMIT).toArray(function(err, items) {
+			if( err ) return callback(err);
+
+			// double check they are still sorted, this should be quick
+			sortItems(items);
+
+			// clean out blacklist arrs
+			for( var i = 0; i < items.length; i++ ) {
+				items[i] = cleanRecord(items[i]);
+			}
+
+			callback(null, items);
+		});
+
 	});
 }
+
+// get just the filter counts for a query
+function filterCounts(options, query, callback) {
+	var filters = {};
+	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
+		filters[config.db.indexedFilters[i]] = 1;
+	}
+
+	// query and respond only with the count fields
+	collection.find(options, filters).limit(LIMIT).toArray(function(err, items) {
+		if( err ) return callback(err);
+		callback(null, items.length, getFilters(items, query.filters));
+	});
+}
+
 
 function handleItemsQuery(query, items, callback) {
 	if( DEBUG ) console.log("Handling response");
@@ -378,35 +457,7 @@ function handleItemsQuery(query, items, callback) {
 		return sendEmptyResultSet(query, callback);
 	}
 	
-	if( config.db.useMongoTextScore ) {
-		
-		var factor = config.db.mongoTextScoreFactor;
-		if( !factor ) factor = 50;
-		
-		for( var i = 0; i < items.length; i++ ) {
-			if( items[i].mongo_text_score == null ) items[i].mongo_text_score = 0;
-			if( items[i][config.db.sortBy] == null ) items[i][config.db.sortBy] = 0;
-			items[i]["_original"+config.db.sortBy] = items[i][config.db.sortBy];
-			items[i][config.db.sortBy] = items[i][config.db.sortBy] + (items[i].mongo_text_score * factor );
-		}
-	}
-	
-	// sort items
-	if( config.db.sortBy && config.db.sortOrder == "desc" ) {
-		items.sort(function(a,b) {
-			if( a[config.db.sortBy] > b[config.db.sortBy] ) return -1;
-			if( a[config.db.sortBy] < b[config.db.sortBy] ) return 1;
-			return 0;
-		});
-	} else if ( config.db.sortBy ) {
-		items.sort(function(a,b) {
-			if( a[config.db.sortBy] < b[config.db.sortBy] ) return -1;
-			if( a[config.db.sortBy] > b[config.db.sortBy] ) return 1;
-			return 0;
-		});
-	}
-	
-	
+	sortItems(items);
 	
 	response.total = items.length;
 
@@ -427,8 +478,40 @@ function handleItemsQuery(query, items, callback) {
 	if( !query.includeFilters ) {
 		delete response.filters;
 	}
-	
-	callback(null, response);
+
+	if( callback ) callback(null, response);
+}
+
+function sortItems(items) {
+
+	if( config.db.useMongoTextScore ) {
+		
+		var factor = config.db.mongoTextScoreFactor;
+		if( !factor ) factor = 50;
+		
+		for( var i = 0; i < items.length; i++ ) {
+			if( items[i].mongo_text_score == null ) items[i].mongo_text_score = 0;
+			if( items[i][config.db.sortBy] == null ) items[i][config.db.sortBy] = 0;
+
+			items[i]["_original"+config.db.sortBy] = items[i][config.db.sortBy];
+			items[i][config.db.sortBy] = items[i][config.db.sortBy] + (items[i].mongo_text_score * factor );
+		}
+	}
+
+	// sort items
+	if( config.db.sortBy && config.db.sortOrder == "desc" ) {
+		items.sort(function(a,b) {
+			if( a[config.db.sortBy] > b[config.db.sortBy] ) return -1;
+			if( a[config.db.sortBy] < b[config.db.sortBy] ) return 1;
+			return 0;
+		});
+	} else if ( config.db.sortBy ) {
+		items.sort(function(a,b) {
+			if( a[config.db.sortBy] < b[config.db.sortBy] ) return -1;
+			if( a[config.db.sortBy] > b[config.db.sortBy] ) return 1;
+			return 0;
+		});
+	}
 }
 
 function setCache(response) {
