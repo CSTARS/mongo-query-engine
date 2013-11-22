@@ -3,6 +3,7 @@ var passport = require('passport');
 var Browser = require("zombie");
 var app = express();
 var queryEngine = require('./mqe');
+var cp = require('child_process');
 var config;
 
 // crappy IE hacks have made it to the server!!!! 
@@ -120,12 +121,17 @@ app.get('/rest/sitemap', function(req, res){
 	});
 });
 
+
+// creates a bot readable snapshot of the landing page
 function generateStaticSnapshot(req, res) {
 
 	function ready() {
 		
 		// remove all script tags
 		browser.window.$("script").remove();
+
+		// remove all styles, not needed
+		//browser.window.$("link").remove();
 
 		var html = browser.html();
 
@@ -139,10 +145,10 @@ function generateStaticSnapshot(req, res) {
 	url = url+"/#"+req.query._escaped_fragment_;
 
 	console.log("STATIC REQUEST: "+ url);
+
 	browser = new Browser();
 	try {
 		browser.visit(url, function () {
-			console.log("here");
 			if( browser.window.CERES.mqe._lploaded ) {
 				ready();
 			} else {
@@ -156,12 +162,28 @@ function generateStaticSnapshot(req, res) {
 		delete browser;
 		res.send(404);
 	}
-
 }
 
 
 // serve the mqe js
 app.use("/mqe", express.static(__dirname+"/public"));
+
+// if the server has an import module, schedule it,
+if( config.import && config.import.module ) {
+	setInterval(function(){
+		// fork a child process for the importer
+		cp.fork(config.import.module, [process.argv[2]]);
+	}, config.import.interval);
+
+
+
+	// run once on start
+	setTimeout(function(){
+		cp.fork(config.import.module, [process.argv[2]]);
+	},5000);
+}
+
+
 
 
 app.listen(config.server.localport);

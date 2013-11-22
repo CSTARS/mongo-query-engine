@@ -102,14 +102,15 @@ exports.getSitemap = function(req, callback) {
 				  '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+
 					'<url>'+
     					'<loc>'+host+'</loc>'+
-    					'<changefreq>daily</changefreq>'+
-    					'<priority>0.8</priority>'+
+    					'<changefreq>weekly</changefreq>'+
+    					'<priority>1</priority>'+
 					'</url>';
 
 		for( var i = 0; i < items.length; i++ ) {
 			xml += '<url>'+
 						'<loc>'+host+'#!lp/'+items[i][id]+'</loc>'+
-    					'<changefreq>daily</changefreq>'+
+    					'<changefreq>weekly</changefreq>'+
+    					'<priority>.5</priority>'+
     				'</url>';
 		}
 		xml += '</urlset>';
@@ -335,7 +336,7 @@ function textQuery(query, callback) {
 // performs just a filter query
 function filterQuery(query, callback) {	
 	if( DEBUG ) console.log("Running filters only query: ");
-	
+
 	var options = {}
 	
 	// set geo filter if it exits 
