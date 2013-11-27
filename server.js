@@ -167,23 +167,43 @@ function generateStaticSnapshot(req, res) {
 
 
 // serve the mqe js
+var lastImport = 0;
 app.use("/mqe", express.static(__dirname+"/public"));
 
 // if the server has an import module, schedule it,
 if( config.import && config.import.module ) {
-	setInterval(function(){
-		// fork a child process for the importer
-		cp.fork(config.import.module, [process.argv[2]]);
-	}, config.import.interval);
+    
 
+	if( config.import.interval ) { // run importer on a certain interval
+		setInterval(function(){
+			runImport();
+		}, config.import.interval);
 
+        // run importer at certain times... can use wildcard "*" from hour
+	} else if ( config.import.hour && config.import.minute ) {
 
-	// run once on start
+        setInterval(function(){
+            var t = new Date();
+
+            if( (t.getHours() == config.import.hour || config.import.hour == "*" ) 
+                && config.import.minute == t.getMinutes() && (t.getTime() - lastImport) > 60000 ){
+                // fork a child process for the importer
+                runImport();
+            }
+        }, 5000);
+	}
+
+	//run once on start
 	setTimeout(function(){
-		cp.fork(config.import.module, [process.argv[2]]);
+		runImport();
 	},5000);
 }
 
+function runImport() {
+    console.log("Running import module");
+    lastImport = new Date().getTime();
+    cp.fork(config.import.module, [process.argv[2]]);
+}
 
 
 
