@@ -51,7 +51,6 @@ if( config.server.allowedDomains ) {
 // https://support.google.com/webmasters/answer/174992?hl=en
 var escapedFragments = function(req, res, next) {
 	if( !req.query._escaped_fragment_ ) return next();
-	console.log(1);
 	generateStaticSnapshot(req, res);
 }
 
@@ -128,24 +127,16 @@ app.get('/rest/sitemap', function(req, res){
 function generateStaticSnapshot(req, res) {
 
 	function ready() {
-		console.log(6);
-
 		// remove all script tags
 		browser.window.$("script").remove();
 
 		// remove all styles, not needed
 		//browser.window.$("link").remove();
 
-		console.log(7);
-
 		var html = browser.html();
-
-		console.log(8);
-
 		browser.close();
 		delete browser;
 
-		console.log(9);
 		res.send(html);
 	}
 
@@ -158,7 +149,6 @@ function generateStaticSnapshot(req, res) {
 
 	browser = new Browser();
 	try {
-		console.log(2);
 		browser.visit(url, function () {
 			if( !browser.window.CERES ) {
 				browser.window.CERES = {
@@ -167,17 +157,14 @@ function generateStaticSnapshot(req, res) {
 			}
 
 			if( browser.window.CERES.mqe._lploaded ) {
-				console.log(3);
 				ready();
 			} else {
 				browser.window.CERES.mqe.lpready = function() {
-					console.log(4);
 					ready();
 				};
 			}
 		});
 	} catch (e) {
-		console.log(5);
 		browser.close();
 		delete browser;
 		res.send(404);
