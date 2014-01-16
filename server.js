@@ -126,49 +126,26 @@ app.get('/rest/sitemap', function(req, res){
 // creates a bot readable snapshot of the landing page
 function generateStaticSnapshot(req, res) {
 
-	function ready() {
-		// remove all script tags
-		browser.window.$("script").remove();
-
-		// remove all styles, not needed
-		//browser.window.$("link").remove();
-
-		var html = browser.html();
-		browser.close();
-		delete browser;
-
-		res.send(html);
-	}
-
-	//var url = "http://"+config.server.host;
 	var url = "http://localhost"+(config.server.localport ? ":"+config.server.localport : "");
 	if( !url.match(/\/?/) ) url += "/";
 	url = url+"/#"+req.query._escaped_fragment_;
-
 	console.log("STATIC REQUEST: "+ url);
 
-	browser = new Browser();
-	try {
-		browser.visit(url, function () {
-			if( !browser.window.CERES ) {
-				browser.window.CERES = {
-					mqe : {}
-				};
-			}
 
-			if( browser.window.CERES.mqe._lploaded ) {
-				ready();
-			} else {
-				browser.window.CERES.mqe.lpready = function() {
-					ready();
-				};
-			}
-		});
-	} catch (e) {
-		browser.close();
-		delete browser;
-		res.send(404);
-	}
+	var err = '';
+	var html = '';
+
+    var zombie = cp.fork('snapshot.js', [url], {silent:true});
+	zombie.stdout.on('data', function (data) {
+	  html += data;
+	});
+	zombie.stderr.on('data', function (data) {
+	  err += data;
+	});
+	zombie.on('close', function (code) {
+		if( err.length > 0 ) return res.send(err);
+		res.send(html);
+	});
 }
 
 

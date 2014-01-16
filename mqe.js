@@ -14,12 +14,36 @@ exports.init = function(conf, callback) {
 	
 	if( config.debug != null ) DEBUG = config.debug;
 	
+	connect(function(success){
+		if( !success && config.db.initd ) {
+			startMongo(function(){
+				connect(function(success){
+					if( success ) {
+						callback();
+					} else {
+						console.log("Failed to connect to mongo, attempted mongod startup and still no love.");
+						process.exit(-1);
+					}
+				});
+			});
+		} else if ( !success ) {
+			console.log("Failed to connect to mongo, no startup script provided (config.db.initd).");
+			process.exit(-1);
+		} else {
+			callback();
+		}
+	});
+}
+
+function connect(callback, quitOnFailure) {
 	MongoClient.connect(config.db.url, function(err, database) {
-		if( err ) return console.log(err);
+		if( err ) {
+			console.log(err);
+			return callback(false);
+		}
+
 		db = database;
 		if( DEBUG ) console.log("Connected to db: "+config.db.url);
-		
-		callback();
 		  
 		db.collection(config.db.mainCollection, function(err, coll) { 
 			if( err ) return console.log(err);
@@ -27,7 +51,9 @@ exports.init = function(conf, callback) {
 			collection = coll;
 			
 			// make sure all working indexes are set
-			ensureIndexes();
+			ensureIndexes(function(){
+				callback(true);
+			});
 		});
 		db.collection(config.db.cacheCollection, function(err, cash) { 
 			if( err ) return console.log(err);
@@ -35,6 +61,24 @@ exports.init = function(conf, callback) {
 			cache = cash;
 		});
 	});
+}
+
+function startMongo(callback) {
+	// fork to mongod process
+	var exec = require('child_process').exec;
+	function puts(error, stdout, stderr) { 
+		if( DEBUG && stdout ) console.log(stdout);
+		if( DEBUG && stderr ) console.log(stderr);
+	}
+
+	exec(config.db.initd+' --setParameter textSearchEnabled=true', puts);
+	if( DEBUG ) console.log("Starting mongo, calling '"+config.db.initd+"'...");
+
+	// TODO: is there a better way to know when things are running?
+	setTimeout(function(){
+		callback();
+	}, 3000);
+	
 }
 
 exports.getDatabase = function() {
@@ -160,6 +204,8 @@ function ensureIndexes(callback) {
 			if( err ) {
 				console.log("Error creating text index: ");
 				console.log(err);
+			} else {
+				callback();
 			}
 		});
 	});
