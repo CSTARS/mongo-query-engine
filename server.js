@@ -135,7 +135,7 @@ function generateStaticSnapshot(req, res) {
 	var err = '';
 	var html = '';
 
-    var zombie = cp.fork('snapshot.js', [url], {silent:true});
+    var zombie = cp.fork(__dirname+'/snapshot.js', [url], {silent:true});
 	zombie.stdout.on('data', function (data) {
 	  html += data;
 	});
