@@ -45,6 +45,10 @@ function connect(callback, quitOnFailure) {
 		db = database;
 		if( DEBUG ) console.log("Connected to db: "+config.db.url);
 		  
+        db.on('close', function(){
+        	restartMongo();
+        });
+
 		db.collection(config.db.mainCollection, function(err, coll) { 
 			if( err ) return console.log(err);
 			if( DEBUG ) console.log("Connected to collection: "+config.db.mainCollection);
@@ -71,14 +75,52 @@ function startMongo(callback) {
 		if( DEBUG && stderr ) console.log(stderr);
 	}
 
-	exec(config.db.initd+' --setParameter textSearchEnabled=true', puts);
+	// make sure text search is enabled 
+	var initd = config.db.initd;
+	if( !initd.match(/.*textSearchEnabled.*/) ) {
+		initd = initd+' --setParameter textSearchEnabled=true';
+	}
+
+	exec(initd+, puts);
 	if( DEBUG ) console.log("Starting mongo, calling '"+config.db.initd+"'...");
 
 	// TODO: is there a better way to know when things are running?
 	setTimeout(function(){
-		callback();
+		if( callback ) callback();
 	}, 3000);
 	
+}
+
+// if mongo goes down attempt to restart is
+var restartCount = 0;
+var restartTimer = -1;
+function restartMongo() {
+	console.log('Attempting mongo restart');
+
+	restartCount++;
+	if( restartCount > 3 ) {
+		console.log('Attempted 3 restarts of mongo, all failed.  Quiting out.');
+		process.exit(-1);
+	}
+
+	startMongo(function(){
+		
+		connect(function(success){
+			if( success ) {
+				console.log('Restart success');
+			} else {
+				setTimeout(function(){
+					restartMongo();
+				}, 2000);
+			}
+		});
+	});
+
+	// after an hour assume all is well
+	if( restartTimer != -1 ) return;
+	restartTimer = setTimeout(function(){
+		restartCount = 0;
+	}, 1000*60*60);
 }
 
 exports.getDatabase = function() {

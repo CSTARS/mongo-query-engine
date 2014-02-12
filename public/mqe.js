@@ -149,7 +149,14 @@ CERES.mqe = (function(){
 	function _updateResult(hash) {
 		$.get(host+'/rest/get?'+resultQueryParameter+'='+hash[1],
 			function(data) {
-				$(window).trigger("result-update-event",[data]);  
+				// make sure something was returned...
+				var error = true;
+				for( var key in data ) {
+					error = false;
+					break;
+				}
+
+				$(window).trigger("result-update-event",[data, error]);  
 			}
 		);
 	}
