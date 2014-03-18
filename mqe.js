@@ -81,7 +81,7 @@ function startMongo(callback) {
 		initd = initd+' --setParameter textSearchEnabled=true';
 	}
 
-	exec(initd+, puts);
+	exec(initd, puts);
 	if( DEBUG ) console.log("Starting mongo, calling '"+config.db.initd+"'...");
 
 	// TODO: is there a better way to know when things are running?
