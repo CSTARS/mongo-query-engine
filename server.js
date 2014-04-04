@@ -152,7 +152,7 @@ function generateStaticSnapshot(req, res) {
         { encoding: 'utf8',
           timeout: 1000*60,
           //maxBuffer: 200*1024,
-          killSignal: 'SIGTERM'
+          killSignal: 'SIGKILL'
           //cwd: null,
           //env: null 
         },
