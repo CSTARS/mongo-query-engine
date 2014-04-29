@@ -6,6 +6,9 @@ var queryEngine = require('./mqe');
 var cp = require('child_process');
 var config;
 
+var winston = require('winston');
+
+
 // crappy IE hacks have made it to the server!!!! 
 // man ie is horrible.  Ok, here is the issue: https://github.com/senchalabs/connect/issues/355
 // here is the fix: https://github.com/advanced/express-ie-cors, patch below
@@ -19,10 +22,49 @@ if( process.argv.length < 3 ) {
 
 config = require(process.argv[2]);
 
+// setup logger
+// winston log levels: info, warn, error
+// default is to standard out
+var loggerConfig = {
+    timestamp : true, 
+    maxsize   : (config.logging && config.logging.maxsize) ? config.logging.maxsize : 1048576,
+    json      : (config.logging && config.logging.json != null) ? config.logging.json : false
+}
+var httpLoggerConfig = {
+    timestamp : false,
+    maxsize : (config.logging && config.logging.maxsize) ? config.logging.maxsize : 1048576,
+    json    : (config.logging && config.logging.json != null) ? config.logging.json : false
+}
+var logTransport = winston.transports.Console;
+
+if( config.logging && config.logging.dir ) {
+    loggerConfig.filename = config.logging.dir+'/app.log';
+    httpLoggerConfig.filename = config.logging.dir+'/http.log';
+    logTransport = winston.transports.File;
+}
+
+
+var logger = new (winston.Logger)({
+    transports: [new (logTransport)(loggerConfig)]
+});
+var httpLogger = new (winston.Logger)({
+    transports: [new (logTransport)(httpLoggerConfig)]
+});
+
+var winstonStream = {
+    write: function(message, encoding){
+        httpLogger.info(message.replace(/\n$/,''));
+    }
+};
+
+logger.info('***Starting the Mongo Query Engine***');
+
+
 // handle the error safely
 process.on('uncaughtException', function(err) {
-    console.log(err);
+    logger.error(err);
 });
+
 
 //include auth model
 var auth;
@@ -45,7 +87,6 @@ if( config.server.allowedDomains ) {
     }
 }
 
-
 // middleware to handle _escaped_fragment_ requests
 // this allows google and (others?) to crawl mqe sites
 // https://support.google.com/webmasters/answer/174992?hl=en
@@ -55,8 +96,8 @@ var escapedFragments = function(req, res, next) {
         generateStaticSnapshot(req, res);
     } catch(e) {
         res.send({error:true,message:'error generating snapshot'});
-        console.log('Error w/ escapedFragment request:');
-        console.log(e);
+        logger.error('Error w/ escapedFragment request:');
+        logger.error(e);
     }
     
 }
@@ -68,7 +109,7 @@ app.configure(function() {
     app.use(expressIeCors);
     app.use(express.bodyParser());
     app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
-    app.use(express.logger());
+    app.use(express.logger({stream:winstonStream}));
     if( allowCrossDomain ) app.use(allowCrossDomain);
     
     app.use(passport.initialize());
@@ -85,14 +126,17 @@ app.configure(function() {
 
 // load config and initialize engine
 try {
-    queryEngine.init(config, function(){
+    queryEngine.init(config, logger, function(){
+        logger.info('bootstrapping  webserver: '+config.server.script);
+
         // once the database connection is made, bootstrap the webserver
         var webserver = require(config.server.script);
         webserver.bootstrap({
             express: express, 
             passport: passport,
             app: app,
-            mqe: queryEngine
+            mqe: queryEngine,
+            logger: logger
         });
     });
 } catch (e) {
@@ -107,37 +151,50 @@ if( config.auth ) auth.setEndpoints(app, passport, config);
 
 // get the results of a query
 app.get('/rest/query', function(req, res){
+    logger.info('/query request recieved');
+
     queryEngine.getResults(req, function(err, results){
         if( err ) return res.send(err);
         res.send(results);
+
+        logger.info('/query response sent');
     });
 });
 
 app.get('/rest/get', function(req, res){
+    logger.info('/get request recieved');
+
     queryEngine.getItem(req, function(err, result){
         if( err ) return res.send(err);
         res.send(result);
+
+        logger.info('/get response sent');
     });
 });
 
 // return xml sitemap for all urls
 app.get('/rest/sitemap', function(req, res){
+    logger.info('/sitemap request recieved');
+
     queryEngine.getSitemap(req, function(result){
         if( result.error ) return res.send(result);
         res.set('Content-Type', 'text/xml; charset=utf-8');
+
         res.send(result.xml);
+        logger.info('/sitemap response sent');
     });
 });
 
 
 // creates a bot readable snapshot of the landing page
 function generateStaticSnapshot(req, res) {
+    logger.info('snapshot request recieved');
 
     var url = "http://localhost"+(config.server.localport ? ":"+config.server.localport : "");
     if( !url.match(/\/?/) ) url += "/";
     url = url+"/#"+req.query._escaped_fragment_;
-    console.log("STATIC REQUEST: "+ url);
-
+    
+    logger.info('snapshot url: '+url);
 
     var err = '';
     var html = '';
@@ -158,27 +215,18 @@ function generateStaticSnapshot(req, res) {
         },
         function (error, stdout, stderr) {
             if( error != null ) {
+                logger.error('error generating snapshot');
                 return res.send({error: true, message: 'error generating snapshot'});
             } else if ( stderr.length > 0 ) {
+                logger.error('error generating snapshot');
                 return res.send({error: true, message: 'error generating snapshot'});
             }
 
+            logger.error('snapshot generation complete: '+url);
             res.send(stdout);
         }
     );
 
-    /* old fork code */
-    /*var zombie = cp.fork(__dirname+'/snapshot.js', [url], {silent:true});
-    zombie.stdout.on('data', function (data) {
-      html += data;
-    });
-    zombie.stderr.on('data', function (data) {
-      err += data;
-    });
-    zombie.on('close', function (code) {
-        if( err.length > 0 ) return res.send(err);
-        res.send(html);
-    });*/
 }
 
 
@@ -216,12 +264,28 @@ if( config.import && config.import.module ) {
 }
 
 function runImport() {
-    console.log("Running import module");
+    logger.info("Running import module: "+config.node+' '+config.import.module+' '+process.argv[2]);
     lastImport = new Date().getTime();
-    cp.fork(config.import.module, [process.argv[2]]);
+    //cp.fork(]);
+
+    cp.exec(config.node+' '+config.import.module+' '+process.argv[2],
+        { encoding: 'utf8',
+          //timeout: 1000*60,
+          //maxBuffer: 200*1024,
+          //killSignal: 'SIGKILL'
+          //cwd: null,
+          //env: null 
+        },
+        function (error, stdout, stderr) {
+            if( error ) logger.error(error);
+            if( stdout ) logger.info(stdout);
+            if( stderr ) logger.error(stderr);
+
+        }
+    );
 }
 
 
 
 app.listen(config.server.localport);
-console.log("MQE is up and running at http://"+config.server.host+":"+config.server.localport);
+logger.info("MQE is up and running at http://"+config.server.host+":"+config.server.localport);

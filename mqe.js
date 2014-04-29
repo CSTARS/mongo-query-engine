@@ -1,19 +1,19 @@
 /**
  * The Mongo Query Engine (MQE)
  */
-
-var DEBUG = true;
-
 var MongoClient = require('mongodb').MongoClient, db, collection, cache, config;
 var ObjectId = require('mongodb').ObjectID;
 var extend = require('extend');
-var LIMIT = 100000;
 
-exports.init = function(conf, callback) {
+var LIMIT = 100000;
+var logger;
+
+
+exports.init = function(conf, log, callback) {
 	config = conf;
+	logger = log;
 	
-	if( config.debug != null ) DEBUG = config.debug;
-	
+
 	connect(function(success){
 		if( !success && config.db.initd ) {
 			startMongo(function(){
@@ -21,13 +21,13 @@ exports.init = function(conf, callback) {
 					if( success ) {
 						callback();
 					} else {
-						console.log("Failed to connect to mongo, attempted mongod startup and still no love.");
+						logger.error("Failed to connect to mongo, attempted mongod startup and still no love.");
 						process.exit(-1);
 					}
 				});
 			});
 		} else if ( !success ) {
-			console.log("Failed to connect to mongo, no startup script provided (config.db.initd).");
+			logger.info("Failed to connect to mongo, no startup script provided (config.db.initd).");
 			process.exit(-1);
 		} else {
 			callback();
@@ -36,22 +36,25 @@ exports.init = function(conf, callback) {
 }
 
 function connect(callback, quitOnFailure) {
+	logger.info('connecting to mongo: '+config.db.url);
+
 	MongoClient.connect(config.db.url, function(err, database) {
 		if( err ) {
-			console.log(err);
+			logger.error(err);
 			return callback(false);
 		}
 
 		db = database;
-		if( DEBUG ) console.log("Connected to db: "+config.db.url);
+		logger.info("Connected to db: "+config.db.url);
 		  
         db.on('close', function(){
+        	logger.warn('database fired close event');
         	restartMongo();
         });
 
 		db.collection(config.db.mainCollection, function(err, coll) { 
-			if( err ) return console.log(err);
-			if( DEBUG ) console.log("Connected to collection: "+config.db.mainCollection);
+			if( err ) return logger.error(err);
+			logger.info("Connected to collection: "+config.db.mainCollection);
 			collection = coll;
 			
 			// make sure all working indexes are set
@@ -60,19 +63,20 @@ function connect(callback, quitOnFailure) {
 			});
 		});
 		db.collection(config.db.cacheCollection, function(err, cash) { 
-			if( err ) return console.log(err);
-			if( DEBUG ) console.log("Connected to cache collection: "+config.db.cacheCollection);
+			if( err ) return logger.error(err);
+			logger.info("Connected to cache collection: "+config.db.cacheCollection);
 			cache = cash;
 		});
 	});
 }
 
 function startMongo(callback) {
+
 	// fork to mongod process
 	var exec = require('child_process').exec;
 	function puts(error, stdout, stderr) { 
-		if( DEBUG && stdout ) console.log(stdout);
-		if( DEBUG && stderr ) console.log(stderr);
+		if( stdout ) logger.info(stdout);
+		if( stderr ) logger.error(stderr);
 	}
 
 	// make sure text search is enabled 
@@ -81,25 +85,25 @@ function startMongo(callback) {
 		initd = initd+' --setParameter textSearchEnabled=true';
 	}
 
+	logger.info("Starting MongoDB: "+config.db.initd);
 	exec(initd, puts);
-	if( DEBUG ) console.log("Starting mongo, calling '"+config.db.initd+"'...");
+	
 
 	// TODO: is there a better way to know when things are running?
 	setTimeout(function(){
 		if( callback ) callback();
 	}, 3000);
-	
 }
 
 // if mongo goes down attempt to restart is
 var restartCount = 0;
 var restartTimer = -1;
 function restartMongo() {
-	console.log('Attempting mongo restart');
+	logger.info('Attempting mongo restart, attempt: '+(restartCount+1));
 
 	restartCount++;
 	if( restartCount > 3 ) {
-		console.log('Attempted 3 restarts of mongo, all failed.  Quiting out.');
+		logger.error('Attempted 3 restarts of mongo, all failed.  Quiting out.');
 		process.exit(-1);
 	}
 
@@ -107,7 +111,7 @@ function restartMongo() {
 		
 		connect(function(success){
 			if( success ) {
-				console.log('Restart success');
+				logger.info('MongoDB restart success');
 			} else {
 				setTimeout(function(){
 					restartMongo();
@@ -128,14 +132,16 @@ exports.getDatabase = function() {
 }
 
 exports.getResults = function(req, callback) {
-	if( !db || !collection ) callback({message:"no database connection"});
-	if( DEBUG ) console.log("===NEW QUERY REQUEST===");
+	if( !db || !collection ) {
+		logger.error('no database connection for mqe.getResults()');
+		callback({message:"no database connection"});
+	}
 	
 	var query = queryParser(req);
-	
+
 	checkCache(query, function(err, result) {
 		// if cache err, let console know, but continue on
-		if( err ) console.log(err);
+		if( err ) logger.error(err);
 		
 		// if cache hit, return
 		if( result ) {
@@ -152,8 +158,10 @@ exports.getResults = function(req, callback) {
 }
 
 exports.getItem = function(req, callback) {
-	if( !db || !collection ) return callback({error: true, message:"no database connection"});
-	if( DEBUG ) console.log("===NEW ITEM REQUEST===");
+	if( !db || !collection ) {
+		logger.error('no database connection for mqe.getItem()');
+		return callback({error: true, message:"no database connection"});
+	}
 
 	// take the first query parameter and retrieve and item by the id;
 	var options = {};
@@ -162,26 +170,45 @@ exports.getItem = function(req, callback) {
 		else options[key] = req.query[key];
 	}
 	
+	logger.info('Querying main collection: '+JSON.stringify(options));
 	collection.find(options).toArray(function(err, result){
-		if( err ) return callback(err);
+		if( err ) {
+			logger.error(err);
+			return callback(err);
+		}
+
+		logger.info('Main collection query success');
 		callback(null, cleanRecord(result[0]));
 	});
 }
 
 exports.getSitemap = function(req, callback) {
-	if( !db || !collection ) return callback({error:true, message:"no database connection"});
+	if( !db || !collection ) {
+		logger.error('no database connection for mqe.getSitemap()');
+		return callback({error:true, message:"no database connection"});
+	}
 
 	var host = req.query.host;
 	var id = req.query.id;
-	if( !host ) return callback({error:true, message:"no host provided"});
+	if( !host ) {
+		logger.error('no host provided');
+		return callback({error:true, message:"no host provided"});
+	}
 	if( !id ) id = "_id";
 
 	options = {title:1};
 	options[id] = 1;
 
 	collection.find({},options).toArray(function(err, items){
-		if( err ) return callback(err);
-		if( !items ) return callback({error:true,message:"Bad response from query"});
+		if( err ) {
+			logger.error(err);
+			return callback(err);
+		}
+
+		if( !items ) {
+			logger.error('Bad response from query: '+JSON.stringify(options));
+			return callback({error:true,message:"Bad response from query"});
+		}
 
 		if( !host.match(/\/$/) ) host = host + "/";
 
@@ -207,20 +234,29 @@ exports.getSitemap = function(req, callback) {
 }
 
 function ensureIndexes(callback) {
+	logger.info('ensuring indexes');
+
 	var options1 = {};
 	
 	// create geo index
 	if( config.db.geoFilter ) {
 		options1[config.db.geoFilter] = "2dsphere";
 		
+		logger.info('rebuilding geo index: '+JSON.stringify(options1));
+
 		// drop index
 		// TODO: there should be a force option for this
-		collection.dropIndex(options1, function(){
+		collection.dropIndex(options1, function(err, result){
+			if( err ) logger.error(err);
+			logger.info('geo index dropped');
+
 			// rebuild index
 			collection.ensureIndex( options1, { w: 1}, function(err) {
 				if( err ) {
-					console.log("Error creating geo index: ");
-					console.log(err);
+					logger.error("Error ensuring geo index: ");
+					logger.error(err);
+				} else {
+					logger.info('geo successfully rebuilt');
 				}
 			});
 		});
@@ -240,15 +276,20 @@ function ensureIndexes(callback) {
 		options3.weights = config.db.textIndexWeights;
 	}
 	
-	collection.dropIndex("MqeTextIndex", function(err, result){
-		collection.ensureIndex( options2, options3, function(err, result) {
+	logger.info('rebuilding text index: '+JSON.stringify(options2)+' '+JSON.stringify(options3));
 
+	collection.dropIndex("MqeTextIndex", function(err, result){
+		if( err ) logger.error(err);
+		logger.info('text index dropped');
+
+		collection.ensureIndex( options2, options3, function(err, result) {
 			if( err ) {
-				console.log("Error creating text index: ");
-				console.log(err);
+				logger.error("Error ensuring text index: ");
+				logger.error(err);
 			} else {
-				callback();
+				logger.info('text index rebuilt');
 			}
+			callback();
 		});
 	});
 	
@@ -256,10 +297,12 @@ function ensureIndexes(callback) {
 	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
 		var options4 = {};
 		options4[config.db.indexedFilters[i]] = 1;
+
+		logger.info('Ensuring index: '+JSON.stringify(options4));
 		collection.ensureIndex( options4, function(err) {
 			if( err ) {
-				console.log("Error creating index: ");
-				console.log(err);
+				logger.error("Error ensuring index: ");
+				logger.error(err);
 			}
 		});
 	}
@@ -268,6 +311,8 @@ function ensureIndexes(callback) {
 // texts in the express request object, parses out request
 // sets defaults and sanity checks
 function queryParser(req) {
+	logger.info('starting query parser');
+
 	// set default parameters
 	var query = {
 		text           : "",
@@ -305,21 +350,25 @@ function queryParser(req) {
 	if( !(query.filters instanceof Array) ) {
 		query.filters = [ query.filters ];
 	}
-	
+
+	logger.info('Query parsed: '+JSON.stringify(query));
 	return query;
 }
 
 // check the cached collection for the query, if exsits return
 // otherwise send null
 function checkCache(query, callback) {
-	if( DEBUG ) console.log("Checking cache");
+	logger.info('Checking mqe cache: '+(JSON.stringify(query)));
 
 	cache.find({ 'query.text': query.text, 'query.filters': JSON.stringify(query.filters) }).toArray(function(err, items) {
-		if( err ) return callback(err);
+		if( err ) {
+			logger.error(err);
+			return callback(err);
+		}
 		
 		// get cached items
 		if( items.length > 0 ) {
-			if( DEBUG ) console.log("Cache Hit");
+			logger.info("Cache Hit");
 			var cacheResult = items[0];
 			
 			cacheResult.query.filters = JSON.parse(cacheResult.query.filters);
@@ -346,7 +395,10 @@ function checkCache(query, callback) {
 				
 				
 				collection.find(options).toArray(function(err, items) {
-					if( err ) return callback(err);
+					if( err ) {
+						logger.error(err);
+						return callback(err);
+					}
 					
 					// clear blacklist
 					for( var i = 0; i < items.length; i++ ) {
@@ -358,12 +410,14 @@ function checkCache(query, callback) {
 				});
 				return;
 			}
+
+			logger.warn('sending back empty cache result');
 			
 			// it's empty ... hummmm
 			sendEmptyResultSet(query, callback);
 			return;
 		}
-		if( DEBUG ) console.log("Cache miss");
+		logger.info("Cache miss");
 		
 		// cache miss
 		callback(null, null);
@@ -372,7 +426,7 @@ function checkCache(query, callback) {
 
 // performs a text and filter (optional) query
 function textQuery(query, callback) {
-	if( DEBUG ) console.log("Running text query: ");
+	logger.info("Running text query: "+JSON.stringify(query));
 	
 	var command = {
 		text: config.db.mainCollection,  
@@ -398,10 +452,12 @@ function textQuery(query, callback) {
 		if( query.filters.length > 0 )  command.filter["$and"] = query.filters;
 	}
 	
-	if( DEBUG ) console.log(command);
-	
+	logger.info('MongoDB query: '+command);
 	db.executeDbCommand(command, function(err, resp) {
-		if( err ) return callback(err);
+		if( err ) {
+			logger.error(err);
+			return callback(err);
+		}
 		
 		// make sure we got something back from the mongo
 		if( resp.documents.length == 0 || !resp.documents[0].results || resp.documents[0].results.length == 0 ) {
@@ -422,7 +478,7 @@ function textQuery(query, callback) {
 
 // performs just a filter query
 function filterQuery(query, callback) {	
-	if( DEBUG ) console.log("Running filters only query: ");
+	logger.info("Running filters only query: "+JSON.stringify(query));
 
 	var options = {}
 	
@@ -439,8 +495,6 @@ function filterQuery(query, callback) {
 	}
 	
 	if( query.filters.length > 0 ) options["$and"] = query.filters;
-	
-	if( DEBUG ) console.log(options);
 
 	// going from mongo to json is VERY slow.  And when you return everything it's even slower
 	// Here is the fix for now.
@@ -457,18 +511,25 @@ function filterQuery(query, callback) {
 	}
 
 	filterCounts(options, query, function(err, total, filters){
-		if( err ) return callback(err);
+		if( err ) {
+			logger.error(err);
+			return callback(err);
+		}
 
 		response.total = total;
 		response.filters = filters;
 
 		rangedQuery(options, query, function(err, items){
-			if( err ) return callback(err);
+			if( err ) {
+				logger.error(err);
+				return callback(err);
+			}
 
 			response.items = items;
 			callback(null, response);
 
 			// now run entire query so we can cache
+			logger.info('Running entire query to set cache');
 			collection.find(options).limit(LIMIT).toArray(function(err, items) {
 				handleItemsQuery(query, items);
 			});
@@ -482,9 +543,13 @@ function rangedQuery(options, query, callback) {
 	var filters = {};
 	if( config.db.sortBy ) filters[config.db.sortBy] = 1;
 
+	logger.info('Running ranged query: '+JSON.stringify(options)+' '+JSON.stringify(filters));
 	// query all items, but only return the sort field
 	collection.find(options, filters).limit(LIMIT).toArray(function(err, items) {
-		if( err ) return callback(err);
+		if( err ) {
+			logger.error(err);
+			return callback(err);
+		}
 
 		// sort items
 		sortItems(items);
@@ -497,8 +562,12 @@ function rangedQuery(options, query, callback) {
 		}
 
 		// now grab all the data for just the returned id's
+		logger.info('getting ids: '+JSON.stringify(ids));
 		collection.find({ _id : { $in : ids }}).limit(LIMIT).toArray(function(err, items) {
-			if( err ) return callback(err);
+			if( err ) {
+				logger.error(err);
+				return callback(err);
+			}
 
 			// double check they are still sorted, this should be quick
 			sortItems(items);
@@ -521,6 +590,8 @@ function filterCounts(options, query, callback) {
 		filters[config.db.indexedFilters[i]] = 1;
 	}
 
+	logger.info('Getting filter counts: '+JSON.stringify(options)+' '+JSON.stringify(filters));
+
 	// query and respond only with the count fields
 	collection.find(options, filters).limit(LIMIT).toArray(function(err, items) {
 		if( err ) return callback(err);
@@ -530,7 +601,7 @@ function filterCounts(options, query, callback) {
 
 
 function handleItemsQuery(query, items, callback) {
-	if( DEBUG ) console.log("Handling response");
+	logger.info("Handling response");
 	
 	var response = {
 		total   : 0,
@@ -567,10 +638,12 @@ function handleItemsQuery(query, items, callback) {
 		delete response.filters;
 	}
 
+	logger.info('sending response');
 	if( callback ) callback(null, response);
 }
 
 function sortItems(items) {
+	logger.info('sorting items by '+((config.db.sortOrder) ? config.db.sortOrder : ' mongo default sort'));
 
 	if( config.db.useMongoTextScore ) {
 		
@@ -600,10 +673,11 @@ function sortItems(items) {
 			return 0;
 		});
 	}
+	logger.info('sort complete');
 }
 
 function setCache(response) {
-	if( DEBUG ) console.log("Setting cache");
+	logger.info("Setting cache");
 	
 	var filters = extend(true,{},response.filters);
 	
@@ -630,13 +704,17 @@ function setCache(response) {
 	}
 	
 	cache.insert(cacheItem, {w:1}, function(err, result){
-		if( err ) return console.log(err);
+		if( err ) {
+			logger.error(err);
+		} else {
+			logger.info('cache successfully set');
+		}
 	});
 }
 
 // find all filters for query
 function getFilters(items, currentFilters) {
-	if( DEBUG ) console.log("Aggergating results for filter counts");
+	logger.info("Aggergating results for filter counts");
 
 	var filters = {}, item, value;
 	
@@ -695,6 +773,7 @@ function getFilters(items, currentFilters) {
 		if( filters[filter].length == 0 ) delete filters[filter];
 	}
 	
+	logger.info("Aggergation complete");
 	return filters;
 }
 
@@ -742,7 +821,7 @@ function hasFilter(filter, value, currentFilters) {
 
 // limit the result set to the start / end attr in the query
 function setLimits(query, items) {
-	if( DEBUG ) console.log("Setting query limits (start/stop)");
+	logger.info("Setting query limits (start/stop)");
 	
 	if( query.start > items.length ) return [];
 	
@@ -777,7 +856,7 @@ function cleanRecord(item) {
 
 // send back and empty result set
 function sendEmptyResultSet(query, callback) {
-	if( DEBUG ) console.log("Sending default empty result set");
+	logger.info("Sending default empty result set");
 	callback(
 		null,
 		{
