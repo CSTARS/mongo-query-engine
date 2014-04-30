@@ -75,8 +75,8 @@ function startMongo(callback) {
 	// fork to mongod process
 	var exec = require('child_process').exec;
 	function puts(error, stdout, stderr) { 
-		if( stdout ) logger.info(stdout);
-		if( stderr ) logger.error(stderr);
+		if( stdout ) logger.info('MongoDB: '+stdout);
+		if( stderr ) logger.error('MongoDB: '+stderr);
 	}
 
 	// make sure text search is enabled 
