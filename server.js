@@ -185,6 +185,13 @@ app.get('/rest/sitemap', function(req, res){
     });
 });
 
+// manually clear the simple memcache
+app.get('/rest/clearCache', function(req, res){
+    logger.info('/clearCache request recieved');
+    queryEngine.clearCache();
+    res.send('Success');
+});
+
 
 // creates a bot readable snapshot of the landing page
 function generateStaticSnapshot(req, res) {
@@ -266,21 +273,20 @@ if( config.import && config.import.module ) {
 function runImport() {
     logger.info("Running import module: "+config.node+' '+config.import.module+' '+process.argv[2]);
     lastImport = new Date().getTime();
-    //cp.fork(]);
 
+    // allow imports to run for up to 1 hour
     cp.exec(config.node+' '+config.import.module+' '+process.argv[2],
         { encoding: 'utf8',
-          //timeout: 1000*60,
+          timeout: 1000*60*60,
           //maxBuffer: 200*1024,
-          //killSignal: 'SIGKILL'
+          killSignal: 'SIGKILL'
           //cwd: null,
           //env: null 
         },
         function (error, stdout, stderr) {
-            if( error ) logger.error(error);
-            if( stdout ) logger.info(stdout);
-            if( stderr ) logger.error(stderr);
-
+            if( error ) logger.error('Importer: '+((typeof error == 'object') ? JSON.stringify(error) : error));
+            if( stdout ) logger.info('Importer: '+stdout);
+            if( stderr ) logger.error('Importer: '+stderr);
         }
     );
 }

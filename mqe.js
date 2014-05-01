@@ -1,11 +1,13 @@
 /**
  * The Mongo Query Engine (MQE)
  */
-var MongoClient = require('mongodb').MongoClient, db, collection, cache, config;
+var MongoClient = require('mongodb').MongoClient, db, collection, config;
 var ObjectId = require('mongodb').ObjectID;
 var extend = require('extend');
+var cache = require('./cache');
 
 var LIMIT = 100000;
+var MAX_FILTER_COUNT = 15000;
 var logger;
 
 
@@ -61,11 +63,6 @@ function connect(callback, quitOnFailure) {
 			ensureIndexes(function(){
 				callback(true);
 			});
-		});
-		db.collection(config.db.cacheCollection, function(err, cash) { 
-			if( err ) return logger.error(err);
-			logger.info("Connected to cache collection: "+config.db.cacheCollection);
-			cache = cash;
 		});
 	});
 }
@@ -360,68 +357,32 @@ function queryParser(req) {
 function checkCache(query, callback) {
 	logger.info('Checking mqe cache: '+(JSON.stringify(query)));
 
-	cache.find({ 'query.text': query.text, 'query.filters': JSON.stringify(query.filters) }).toArray(function(err, items) {
-		if( err ) {
-			logger.error(err);
-			return callback(err);
-		}
-		
-		// get cached items
-		if( items.length > 0 ) {
-			logger.info("Cache Hit");
-			var cacheResult = items[0];
-			
-			cacheResult.query.filters = JSON.parse(cacheResult.query.filters);
+	//logger.info('Forcing cache miss, cache is on the copping block');
+	//callback();
+	//return;
+	var item = cache.check(JSON.stringify(query));
 
-			// unescape any foo.bar filter, can't have '.' in key
-			for( var key in cacheResult.filters ) {
-				if( key.match(/.*\:\:.*/) ) {
-					cacheResult.filters[key.replace(/::/g,'.')] = cacheResult.filters[key];
-					delete cacheResult.filters[key];
-				}
-			}
-			
-			// get id's for the range we care about
-			var cacheItems = setLimits(query, cacheResult.items);
-			cacheResult.start = query.start;
-			cacheResult.end = query.end;
-			
-			if( cacheItems.length > 0 ) {
-				
-				var options = { $or : [] };
-				for( var i = 0; i < cacheItems.length; i++ ) {
-					options.$or.push({_id: cacheItems[i] });
-				}
-				
-				
-				collection.find(options).toArray(function(err, items) {
-					if( err ) {
-						logger.error(err);
-						return callback(err);
-					}
-					
-					// clear blacklist
-					for( var i = 0; i < items.length; i++ ) {
-						items[i] = cleanRecord(items[i]);
-					}
-				
-					cacheResult.items = items;
-					callback(null, cacheResult);
-				});
-				return;
-			}
+	if( item ) {
+		logger.info('cache hit');
+		callback(null, JSON.parse(item));
+	} else {
+		logger.info('cache miss');
+		callback();
+	}
+}
 
-			logger.warn('sending back empty cache result');
-			
-			// it's empty ... hummmm
-			sendEmptyResultSet(query, callback);
-			return;
-		}
-		logger.info("Cache miss");
-		
-		// cache miss
-		callback(null, null);
-	});
+
+function setCache(query, response) {
+	logger.info("Setting cache");
+
+	cache.set(JSON.stringify(query), JSON.stringify(response));
+	
+	logger.info('cache successfully set');
+}
+
+exports.clearCache = function() {
+	logger.info('manually clearing cache');
+	cache.clear();
 }
 
 // performs a text and filter (optional) query
@@ -501,7 +462,6 @@ function filterQuery(query, callback) {
 	//    - call full query only on selected range
 	//    - query all items only returning filters and run counts
 	//    - respond to client
-	//    - now run full query and cache
 	var response = {
 		total   : 0,
 		start   : query.start,
@@ -510,14 +470,15 @@ function filterQuery(query, callback) {
 		filters : {}
 	}
 
-	filterCounts(options, query, function(err, total, filters){
+	filterCounts(options, query, function(err, total, filtersResponse){
 		if( err ) {
 			logger.error(err);
 			return callback(err);
 		}
 
 		response.total = total;
-		response.filters = filters;
+		response.filters = filtersResponse.filters;
+		response.truncated = filtersResponse.truncated;
 
 		rangedQuery(options, query, function(err, items){
 			if( err ) {
@@ -526,13 +487,9 @@ function filterQuery(query, callback) {
 			}
 
 			response.items = items;
-			callback(null, response);
 
-			// now run entire query so we can cache
-			logger.info('Running entire query to set cache');
-			collection.find(options).limit(LIMIT).toArray(function(err, items) {
-				handleItemsQuery(query, items);
-			});
+			setCache(query, response);
+			callback(null, response);
 		});
 	})
 
@@ -621,9 +578,10 @@ function handleItemsQuery(query, items, callback) {
 	response.total = items.length;
 
 	response.filters = getFilters(items, query.filters);
-	response.query = query;
+	
+	// who is using this?
+	//response.query = query;
 	response.items = items;
-	setCache(response);
 	
 	response.items = setLimits(query, items);
 	
@@ -637,6 +595,8 @@ function handleItemsQuery(query, items, callback) {
 	if( !query.includeFilters ) {
 		delete response.filters;
 	}
+
+	setCache(query, response);
 
 	logger.info('sending response');
 	if( callback ) callback(null, response);
@@ -676,79 +636,20 @@ function sortItems(items) {
 	logger.info('sort complete');
 }
 
-function setCache(response) {
-	logger.info("Setting cache");
-	
-	var filters = extend(true,{},response.filters);
-	
-	// escape any foo.bar filter, can't have '.' in key
-	for( var key in filters ) {
-		if( key.match(/.*\..*/) ) {
-			filters[key.replace(/\./,"::")] = filters[key];
-			delete filters[key];
-		}
-	}
-	
-	var cacheItem = {
-		query : {
-			filters : JSON.stringify(response.query.filters),
-			text    : response.query.text
-		},
-		items   : [],
-		filters : filters,
-		total   : response.total
-	};
-	
-	for( var i = 0; i < response.items.length; i++ ) {
-		cacheItem.items.push(response.items[i]._id);
-	}
-	
-	cache.insert(cacheItem, {w:1}, function(err, result){
-		if( err ) {
-			logger.error(err);
-		} else {
-			logger.info('cache successfully set');
-		}
-	});
-}
-
 // find all filters for query
+/**
+ * TODO: this should have logic limits on filter counts
+ *   - if a bucket has more than 1000 results, break
+ *   - if 5 buckets have more than 200 results, break
+ *   - if there are more than 50 buckets, break
+ **/
+
 function getFilters(items, currentFilters) {
 	logger.info("Aggergating results for filter counts");
-
-	var filters = {}, item, value;
 	
-	// get the attributes we care about from the config file
-	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
-		filters[config.db.indexedFilters[i]] = {};
-	}
-	
-	// loop over all result items
-	for( var i = 0; i < items.length; i++ ) {
-		item = items[i];
-		
-		// for each result item, check for filters we care about
-		for( var filter in filters ) {
+	var resp = createFilterHash(items, currentFilters);
 
-			// now see if it's a nested filter, only supporting one level
-			// and nested 
-			if ( filter.match(/.*\..*/) ) {
-				var parts = filter.split(".");
-				var subFilter = item[parts[0]];
-				
-				if( subFilter && (subFilter instanceof Array) ) {
-					for( var j = 0; j < subFilter.length; j++ ) {
-						addFilter(filters, currentFilters, subFilter[j][parts[1]], filter);
-					}
-				}
-				
-			} else {
-				addFilter(filters, currentFilters, item[filter], filter);
-			}
-			
-		}
-		
-	}
+	var filters = resp.filters;
 	
 	// now turn into array and sort by count
 	var array;
@@ -774,9 +675,59 @@ function getFilters(items, currentFilters) {
 	}
 	
 	logger.info("Aggergation complete");
-	return filters;
+	return {
+		filters : filters,
+		truncated : resp.truncated
+	};
 }
 
+function createFilterHash(items, currentFilters) {
+	var count = 0;
+
+
+	var filters = {}, item, value;
+	
+	// get the attributes we care about from the config file
+	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
+		filters[config.db.indexedFilters[i]] = {};
+	}
+
+	// loop over all result items
+	for( var i = 0; i < items.length; i++ ) {
+		item = items[i];
+		
+		// for each result item, check for filters we care about
+		for( var filter in filters ) {
+
+			// now see if it's a nested filter, only supporting one level
+			// and nested 
+			if ( filter.match(/.*\..*/) ) {
+				var parts = filter.split(".");
+				var subFilter = item[parts[0]];
+				
+				if( subFilter && (subFilter instanceof Array) ) {
+					for( var j = 0; j < subFilter.length; j++ ) {
+						addFilter(filters, currentFilters, subFilter[j][parts[1]], filter);
+						count++;
+						if( count > MAX_FILTER_COUNT ) {
+							return {filters: filters, truncated: true};
+						}
+					}
+				}
+				
+			} else {
+				addFilter(filters, currentFilters, item[filter], filter);
+				count++;
+				if( count > MAX_FILTER_COUNT ) {
+					return {filters: filters, truncated: true};
+				}
+			}
+			
+		}
+	}
+
+	return {filters: filters, truncated: false};
+}
 
 function addFilter(filters, currentFilters, attrValue, filter) {
 	
