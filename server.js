@@ -261,7 +261,7 @@ if( config.import && config.import.module ) {
                 // fork a child process for the importer
                 runImport();
             }
-        }, 5000);
+        }, 60000);
     }
 
     //run once on start

@@ -146,11 +146,11 @@ exports.getResults = function(req, callback) {
 			return;
 		}
 		
-		if( query.text.length > 0 ) {
-			textQuery(query, callback);
-		} else {
+		//if( query.text.length > 0 ) {
+		//	textQuery(query, callback);
+		//} else {
 			filterQuery(query, callback);
-		}
+		//}
 	});
 }
 
@@ -470,6 +470,10 @@ function filterQuery(query, callback) {
 		filters : {}
 	}
 
+	if( query.text && query.text.length > 0 ) {
+		options['$text'] = {'$search': query.text.toLowerCase()};
+	}
+
 	filterCounts(options, query, function(err, total, filtersResponse){
 		if( err ) {
 			logger.error(err);
@@ -577,11 +581,13 @@ function handleItemsQuery(query, items, callback) {
 	
 	response.total = items.length;
 
-	response.filters = getFilters(items, query.filters);
+	var info = getFilters(items, query.filters);
+	response.filters = info.filters;
+	response.truncated = info.truncated;
 	
 	// who is using this?
 	//response.query = query;
-	response.items = items;
+	//response.items = items;
 	
 	response.items = setLimits(query, items);
 	
