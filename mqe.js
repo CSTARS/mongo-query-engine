@@ -146,11 +146,7 @@ exports.getResults = function(req, callback) {
 			return;
 		}
 		
-		//if( query.text.length > 0 ) {
-		//	textQuery(query, callback);
-		//} else {
-			filterQuery(query, callback);
-		//}
+		filterQuery(query, callback);
 	});
 }
 
@@ -385,57 +381,6 @@ exports.clearCache = function() {
 	cache.clear();
 }
 
-// performs a text and filter (optional) query
-function textQuery(query, callback) {
-	logger.info("Running text query: "+JSON.stringify(query));
-	
-	var command = {
-		text: config.db.mainCollection,  
-		search : query.text.toLowerCase(),
-		limit  : LIMIT
-	};
-	
-	if( query.filters.length > 0 ) {
-		command.filter = {};
-		
-		// set geo filter if it exits 
-		// if so, remove from $and array and set as top level filter option
-		if( config.db.geoFilter ) {
-			for( var i = 0; i < query.filters.length; i++ ) {
-				if( query.filters[i][config.db.geoFilter] ) {
-					command.filter[config.db.geoFilter] = query.filters[i][config.db.geoFilter];
-					query.filters.splice(i, 1);
-					break;
-				}
-			}
-		}
-		
-		if( query.filters.length > 0 )  command.filter["$and"] = query.filters;
-	}
-	
-	logger.info('MongoDB query: '+command);
-	db.executeDbCommand(command, function(err, resp) {
-		if( err ) {
-			logger.error(err);
-			return callback(err);
-		}
-		
-		// make sure we got something back from the mongo
-		if( resp.documents.length == 0 || !resp.documents[0].results || resp.documents[0].results.length == 0 ) {
-			return sendEmptyResultSet(query, callback);
-		}
-		
-		var items = [];
-		for( var i = 0; i < resp.documents[0].results.length; i++ ) {
-			if( config.db.useMongoTextScore ) {
-				resp.documents[0].results[i].obj.mongo_text_score = resp.documents[0].results[i].score; 
-			}
-			items.push(resp.documents[0].results[i].obj);
-		}
-		
-		handleItemsQuery(query, items, callback);
-	});
-}
 
 // performs just a filter query
 function filterQuery(query, callback) {	
@@ -561,53 +506,6 @@ function filterCounts(options, query, callback) {
 }
 
 
-function handleItemsQuery(query, items, callback) {
-	logger.info("Handling response");
-	
-	var response = {
-		total   : 0,
-		start   : query.start,
-		end     : query.end,
-		items   : [],
-		filters : {}
-	}
-	
-	// make sure we got something back from the mongo
-	if( items.length == 0 ) {
-		return sendEmptyResultSet(query, callback);
-	}
-	
-	sortItems(items);
-	
-	response.total = items.length;
-
-	var info = getFilters(items, query.filters);
-	response.filters = info.filters;
-	response.truncated = info.truncated;
-	
-	// who is using this?
-	//response.query = query;
-	//response.items = items;
-	
-	response.items = setLimits(query, items);
-	
-	// clean out blacklist attr
-	for( var i = 0; i < response.items.length; i++ ) {
-		response.items[i] = cleanRecord(response.items[i]);
-	}
-	
-	// I know this seems backwards, but we always want to cache the filters
-	// so we run that and then remove if filters were not requested
-	if( !query.includeFilters ) {
-		delete response.filters;
-	}
-
-	setCache(query, response);
-
-	logger.info('sending response');
-	if( callback ) callback(null, response);
-}
-
 function sortItems(items) {
 	logger.info('sorting items by '+((config.db.sortOrder) ? config.db.sortOrder : ' mongo default sort'));
 
@@ -643,13 +541,6 @@ function sortItems(items) {
 }
 
 // find all filters for query
-/**
- * TODO: this should have logic limits on filter counts
- *   - if a bucket has more than 1000 results, break
- *   - if 5 buckets have more than 200 results, break
- *   - if there are more than 50 buckets, break
- **/
-
 function getFilters(items, currentFilters) {
 	logger.info("Aggergating results for filter counts");
 	
@@ -762,9 +653,7 @@ function addFilter(filters, currentFilters, attrValue, filter) {
 		// add to count
 		if( filters[filter][value] ) filters[filter][value]++;
 		else filters[filter][value] = 1;
-
 	}
-	
 }
 
 // see if the filter/value is in the current list of filters
@@ -773,31 +662,6 @@ function hasFilter(filter, value, currentFilters) {
 		if( currentFilters[i][filter] == value ) return true;
 	}
 	return false;
-}
-
-
-// limit the result set to the start / end attr in the query
-function setLimits(query, items) {
-	logger.info("Setting query limits (start/stop)");
-	
-	if( query.start > items.length ) return [];
-	
-	var results = [];
-	for( var i = query.start; i < query.end; i++ ) {
-		
-		if( items[i] ) {
-			results.push(items[i]);
-		} else {
-			// TODO: why would this ever be null?
-			//results.push({});
-		}
-		
-		
-		// we reached the end
-		if( i-1 == items.length ) break;
-	}
-	
-	return results;
 }
 
 // clear the record of any blacklisted attributes
