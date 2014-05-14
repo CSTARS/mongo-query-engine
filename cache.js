@@ -10,7 +10,10 @@ var INTERVAL = 1000*60*15;
 exports.check = function(key) {
 	if( cache[key] ) {
 		//cache[key].timestamp = new Date().getTime();
-		return cache[key].value;
+		var item = JSON.parse(cache[key].value);
+		item.cached = true;
+		item.timestamp = cache[key].timestamp;
+		return item;
 	}
 	return null;
 }
@@ -49,7 +52,7 @@ function removeOldest() {
 }
 
 // clear every 15min
-setTimeout(function(){
+setInterval(function(){
 	var t = new Date().getTime();
 	for( var key in cache ) {
 		if( (t - cache[key].timestamp) > MAX_AGE ) {

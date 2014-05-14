@@ -360,7 +360,7 @@ function checkCache(query, callback) {
 
 	if( item ) {
 		logger.info('cache hit');
-		callback(null, JSON.parse(item));
+		callback(null, item);
 	} else {
 		logger.info('cache miss');
 		callback();
