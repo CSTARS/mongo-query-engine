@@ -681,7 +681,10 @@ function cleanRecord(item) {
 			if( item[attr] && typeof item[attr] == 'string' ) {
 				try {
 					item[attr] = JSON.parse(item[attr]);
-				} catch(e) {}
+				} catch(e) {
+					logger.error('Error parsing blob attribute: '+attr);
+					logger.error(e);
+				}
 			}
 		}
 	} 
