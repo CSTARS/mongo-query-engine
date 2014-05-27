@@ -665,13 +665,27 @@ function hasFilter(filter, value, currentFilters) {
 }
 
 // clear the record of any blacklisted attributes
+// parse any stringified attributes
 function cleanRecord(item) {
 	if( !item ) return {};
-	if( !config.db.blacklist ) return item;
-	
-	for( var i = 0; i < config.db.blacklist.length; i++ ) {
-		if( item[config.db.blacklist[i]] ) delete item[config.db.blacklist[i]];
+
+	if( config.db.blacklist ) {
+		for( var i = 0; i < config.db.blacklist.length; i++ ) {
+			if( item[config.db.blacklist[i]] ) delete item[config.db.blacklist[i]];
+		}
 	}
+
+	if( config.db.blobs ) {
+		for( var i = 0; i < config.db.blobs.length; i++ ) {
+			var attr = config.db.blobs[i];
+			if( item[attr] && typeof item[attr] == 'string' ) {
+				try {
+					item[attr] = JSON.parse(item[attr]);
+				} catch(e) {}
+			}
+		}
+	} 
+
 	return item;
 }
 
