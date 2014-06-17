@@ -13,6 +13,7 @@ CERES.mqe = (function(){
 	
 	var cPage = "";
 	var cPath = "";
+	var cRest = '';
 	var cQuery = null;
 	var lastSearchHash = ["search"];
 	var host = "";
@@ -134,12 +135,12 @@ CERES.mqe = (function(){
 		}
 		
 		cQuery = search;
-		
-		$.get(host+'/rest/query?text='+search.text + 
+		cRest = host+'/rest/query?text='+search.text + 
 				'&filters=' + encodeURIComponent(JSON.stringify(search.filters)) + 
 				'&start=' + (search.page*search.itemsPerPage) +
-				'&end=' + ((search.page+1)*search.itemsPerPage) +
-				'&includeFilters=true',
+				'&end=' + ((search.page+1)*search.itemsPerPage);
+		
+		$.get(cRest,
 			function(data) {
 				$(window).trigger("search-update-event",[data]);  
 			}
@@ -177,6 +178,10 @@ CERES.mqe = (function(){
 	function getResultPage() {
 		return resultPage;
 	}
+
+	function getRestLink() {
+		return cRest;
+	}
 	
 	function queryToUrlString(query) {
 		var hash = "#search";
@@ -201,7 +206,8 @@ CERES.mqe = (function(){
 		getCurrentQuery : getCurrentQuery,
 		getDefaultQuery : getDefaultQuery,
 		getResultPage : getResultPage,
-		setDefaultFilter : setDefaultFilter
+		setDefaultFilter : setDefaultFilter,
+		getRestLink : getRestLink
 	};
 	
 })();
