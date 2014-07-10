@@ -98,9 +98,38 @@ var escapedFragments = function(req, res, next) {
         res.send({error:true,message:'error generating snapshot'});
         logger.error('Error w/ escapedFragment request:');
         logger.error(e);
-    }
-    
+    }   
 }
+
+function runImport(callback) {
+    logger.info("Running import module: "+config.node+' '+config.import.module+' '+process.argv[2]);
+    lastImport = new Date().getTime();
+
+    // allow imports to run for up to 1 hour
+    cp.exec(config.node+' '+config.import.module+' '+process.argv[2],
+        { encoding: 'utf8',
+          timeout: 1000*60*60,
+          //maxBuffer: 200*1024,
+          killSignal: 'SIGKILL'
+          //cwd: null,
+          //env: null 
+        },
+        function (error, stdout, stderr) {
+            if( error ) logger.error('Importer: '+((typeof error == 'object') ? JSON.stringify(error) : error));
+            if( stdout ) logger.info('Importer: '+stdout);
+            if( stderr ) logger.error('Importer: '+stderr);
+
+            if( !callback ) return;
+            
+            callback({
+                error : error,
+                stdout : stdout,
+                stderr : stderr
+            });
+        }
+    );
+}
+
 
 // setup passport in case the webserver wants authentication setup
 app.configure(function() {
@@ -136,7 +165,8 @@ try {
             passport: passport,
             app: app,
             mqe: queryEngine,
-            logger: logger
+            logger: logger,
+            runImport : runImport
         });
     });
 } catch (e) {
@@ -269,28 +299,6 @@ if( config.import && config.import.module ) {
         runImport();
     },5000);
 }
-
-function runImport() {
-    logger.info("Running import module: "+config.node+' '+config.import.module+' '+process.argv[2]);
-    lastImport = new Date().getTime();
-
-    // allow imports to run for up to 1 hour
-    cp.exec(config.node+' '+config.import.module+' '+process.argv[2],
-        { encoding: 'utf8',
-          timeout: 1000*60*60,
-          //maxBuffer: 200*1024,
-          killSignal: 'SIGKILL'
-          //cwd: null,
-          //env: null 
-        },
-        function (error, stdout, stderr) {
-            if( error ) logger.error('Importer: '+((typeof error == 'object') ? JSON.stringify(error) : error));
-            if( stdout ) logger.info('Importer: '+stdout);
-            if( stderr ) logger.error('Importer: '+stderr);
-        }
-    );
-}
-
 
 
 app.listen(config.server.localport);

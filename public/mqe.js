@@ -88,6 +88,8 @@ CERES.mqe = (function(){
 	}
 	
 	function _updateSearch(hash) {
+		$(window).trigger("search-start-event");
+
 		// set this for the back button
 		lastSearchHash = hash;
 		
