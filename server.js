@@ -73,6 +73,7 @@ logger.info('***Starting the Mongo Query Engine***');
 
 
 //include auth model
+
 var auth;
 if( config.auth ) {
     auth = require(config.auth.script);
@@ -137,12 +138,12 @@ function runImport(callback) {
 }
 
 // setup passport in case the webserver wants authentication setup
-app.use(compression);
-app.use(cookieParser); 
+app.use(compression());
+app.use(cookieParser()); 
 app.use(expressIeCors);
-app.use(bodyParser);
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(session({ secret: 'peopleareverywhereyouknow' }));
-app.use(morgan({format:'combined',stream:winstonStream}));
+app.use(morgan('combined',{stream:winstonStream}));
 if( allowCrossDomain ) app.use(allowCrossDomain);
     
 app.use(passport.initialize());
