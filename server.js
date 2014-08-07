@@ -1,5 +1,11 @@
 var express = require('express');
 var passport = require('passport');
+var compression = require('compression');
+var bodyParser = require('body-parser');
+var cookieParser = require('cookie-parser');
+var session = require('cookie-session');
+var http = require('http');
+var morgan = require('morgan');
 var Browser = require("zombie");
 var app = express();
 var queryEngine = require('./mqe');
@@ -61,9 +67,9 @@ logger.info('***Starting the Mongo Query Engine***');
 
 
 // handle the error safely
-process.on('uncaughtException', function(err) {
+/*process.on('uncaughtException', function(err) {
     logger.error(err);
-});
+});*/
 
 
 //include auth model
@@ -130,28 +136,23 @@ function runImport(callback) {
     );
 }
 
-
 // setup passport in case the webserver wants authentication setup
-app.configure(function() {
-    app.use(express.compress());
-    app.use(express.cookieParser()); 
-    app.use(expressIeCors);
-    app.use(express.bodyParser());
-    app.use(express.session({ secret: 'peopleareverywhereyouknow' }));
-    app.use(express.logger({stream:winstonStream}));
-    if( allowCrossDomain ) app.use(allowCrossDomain);
+app.use(compression);
+app.use(cookieParser); 
+app.use(expressIeCors);
+app.use(bodyParser);
+app.use(session({ secret: 'peopleareverywhereyouknow' }));
+app.use(morgan({format:'combined',stream:winstonStream}));
+if( allowCrossDomain ) app.use(allowCrossDomain);
     
-    app.use(passport.initialize());
-    app.use(passport.session());
+app.use(passport.initialize());
+app.use(passport.session());
     
-    app.use(escapedFragments);
+app.use(escapedFragments);
 
-    // set the auth endpoints
-    if( config.auth ) auth.init(app, passport, config);
+// set the auth endpoints
+if( config.auth ) auth.init(app, passport, config);
     
-    app.use(app.router);
-});
-
 
 // load config and initialize engine
 try {
@@ -168,6 +169,11 @@ try {
             logger: logger,
             runImport : runImport
         });
+	
+	
+	http.createServer(app).listen(config.server.localport);
+	logger.info("MQE is up and running at http://"+config.server.host+":"+config.server.localport);
+
     });
 } catch (e) {
     console.log("failed to load config file");
@@ -177,7 +183,6 @@ try {
 
 // set auth endpoints
 if( config.auth ) auth.setEndpoints(app, passport, config);
-
 
 // get the results of a query
 app.get('/rest/query', function(req, res){
@@ -300,6 +305,3 @@ if( config.import && config.import.module ) {
     },5000);
 }
 
-
-app.listen(config.server.localport);
-logger.info("MQE is up and running at http://"+config.server.host+":"+config.server.localport);

@@ -68,10 +68,12 @@ function connect(callback, quitOnFailure) {
 }
 
 function startMongo(callback) {
+	logger.info("here");
 
 	// fork to mongod process
 	var exec = require('child_process').exec;
 	function puts(error, stdout, stderr) { 
+		if( error ) logger.info('MongoDB: '+json.stringify(error));
 		if( stdout ) logger.info('MongoDB: '+stdout);
 		if( stderr ) logger.error('MongoDB: '+stderr);
 	}
