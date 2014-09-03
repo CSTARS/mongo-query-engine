@@ -404,6 +404,10 @@ function filterQuery(query, callback) {
 	
 	if( query.filters.length > 0 ) options["$and"] = query.filters;
 
+	if( query.text && query.text.length > 0 ) {
+		options['$text'] = {'$search': query.text.toLowerCase()};
+	}
+
 	// going from mongo to json is VERY slow.  And when you return everything it's even slower
 	// Here is the fix for now.
 	//    - call full query only on selected range
@@ -415,10 +419,6 @@ function filterQuery(query, callback) {
 		end     : query.end,
 		items   : [],
 		filters : {}
-	}
-
-	if( query.text && query.text.length > 0 ) {
-		options['$text'] = {'$search': query.text.toLowerCase()};
 	}
 
 	filterCounts(options, query, function(err, total, filtersResponse){
@@ -443,7 +443,38 @@ function filterQuery(query, callback) {
 			callback(null, response);
 		});
 	})
+}
 
+exports.requestToQuery = function(req) {
+	var query = queryParser(req);
+
+	var options = {}
+	
+	// set geo filter if it exits 
+	// if so, remove from $and array and set as top level filter option
+	if( config.db.geoFilter ) {
+		for( var i = 0; i < query.filters.length; i++ ) {
+			if( query.filters[i][config.db.geoFilter] ) {
+				options[config.db.geoFilter] = query.filters[i][config.db.geoFilter];
+				query.filters.splice(i, 1);
+				break;
+			}
+		}
+	}
+	
+	if( query.filters.length > 0 ) options["$and"] = query.filters;
+
+	if( query.text && query.text.length > 0 ) {
+		options['$text'] = {'$search': query.text.toLowerCase()};
+	}
+
+	var filters = {};
+	if( config.db.sortBy ) filters[config.db.sortBy] = 1;
+
+	return {
+		options : options,
+		filters : filters
+	}
 }
 
 // find a sorted range of responsed without returned the entire dataset
