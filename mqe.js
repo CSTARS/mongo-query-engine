@@ -67,6 +67,7 @@ function connect(callback, quitOnFailure) {
 	});
 }
 
+
 function startMongo(callback) {
 	logger.info("here");
 
@@ -235,7 +236,7 @@ function ensureIndexes(callback) {
 	
 	// create geo index
 	if( config.db.geoFilter ) {
-		options1[config.db.geoFilter] = "2dsphere";
+		options1[(config.db.isMapReduce ? 'value.' : '')+config.db.geoFilter] = "2dsphere";
 		
 		logger.info('rebuilding geo index: '+JSON.stringify(options1));
 
@@ -261,7 +262,7 @@ function ensureIndexes(callback) {
 	// now set the index
 	var options2 = {};	
 	for( var i = 0; i < config.db.textIndexes.length; i++ ) {
-		options2[config.db.textIndexes[i]] = "text";
+		options2[(config.db.isMapReduce ? 'value.' : '')+config.db.textIndexes[i]] = "text";
 	}
 	
 	var options3 = {
@@ -291,7 +292,7 @@ function ensureIndexes(callback) {
 	
 	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
 		var options4 = {};
-		options4[config.db.indexedFilters[i]] = 1;
+		options4[(config.db.isMapReduce ? 'value.' : '')+config.db.indexedFilters[i]] = 1;
 
 		logger.info('Ensuring index: '+JSON.stringify(options4));
 		collection.ensureIndex( options4, function(err) {
@@ -355,9 +356,10 @@ function queryParser(req) {
 function checkCache(query, callback) {
 	logger.info('Checking mqe cache: '+(JSON.stringify(query)));
 
-	//logger.info('Forcing cache miss, cache is on the copping block');
-	//callback();
-	//return;
+	logger.info('Forcing cache miss, cache is on the copping block');
+	callback();
+	return;
+
 	var item = cache.check(JSON.stringify(query));
 
 	if( item ) {
@@ -386,6 +388,18 @@ exports.clearCache = function() {
 
 // performs just a filter query
 function filterQuery(query, callback) {	
+	if( config.db.isMapReduce ) {
+		var obj, i;
+		for( i = 0; i < query.filters.length; i++ ) {
+			obj = {};
+			for( var key in query.filters[i] ) {
+				obj['value.'+key] = query.filters[i][key];
+			}
+			query.filters[i] = obj;
+		}
+	}
+
+
 	logger.info("Running filters only query: "+JSON.stringify(query));
 
 	var options = {}
@@ -402,7 +416,9 @@ function filterQuery(query, callback) {
 		}
 	}
 	
-	if( query.filters.length > 0 ) options["$and"] = query.filters;
+	if( query.filters.length > 0 ) {
+		options["$and"] = query.filters;
+	}
 
 	if( query.text && query.text.length > 0 ) {
 		options['$text'] = {'$search': query.text.toLowerCase()};
@@ -421,29 +437,61 @@ function filterQuery(query, callback) {
 		filters : {}
 	}
 
-	filterCounts(options, query, function(err, total, filtersResponse){
+	filterCounts(options, function(err, result){
 		if( err ) {
-			logger.error(err);
-			return callback(err);
+			response.error = true;
+			response.message = err;
+		} else {
+			response.filters = result;
 		}
 
-		response.total = total;
-		response.filters = filtersResponse.filters;
-		response.truncated = filtersResponse.truncated;
-
-		rangedQuery(options, query, function(err, items){
+		collection.count(options, function(err, count){
 			if( err ) {
-				logger.error(err);
-				return callback(err);
+				response.error = true;
+				response.message = err;
+			} else {
+				response.total = count;
 			}
 
-			response.items = items;
+			rangedQuery(options, query, function(err, items){
+				if( err ) {
+					logger.error(err);
+					return callback(err);
+				}
 
-			setCache(query, response);
-			callback(null, response);
+				if( config.db.isMapReduce ) {
+					flattenMapreduce(items);
+				}
+
+				response.items = items;
+
+
+				setCache(query, response);
+				callback(null, response);
+			});
 		});
-	})
+	});
 }
+
+// currently a mapreduce is in the value namespace, 
+// remove this and set all attributes of value to first class
+function flattenMapreduce(items) {
+	var i, key, item, flattened;
+	if( !items ) return;
+
+	for( i = 0; i < items.length; i++ ) {
+		item = items[i];
+		flattened = {
+			'_id' : item._id
+		};
+
+		for( key in item.value ) {
+			flattened[key] = item.value[key];
+		}
+		items[i] = flattened;
+	}
+}
+
 
 exports.requestToQuery = function(req) {
 	var query = queryParser(req);
@@ -522,20 +570,120 @@ function rangedQuery(options, query, callback) {
 	});
 }
 
-// get just the filter counts for a query
-function filterCounts(options, query, callback) {
-	var filters = {};
+function filterCounts(query, callback) {
+
+	var filterNames = [];
+	var filterParts = [];
+	var filters = [];
+
+	// are we checking against a mapreduce collection?
 	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
-		filters[config.db.indexedFilters[i]] = 1;
+		filters.push((config.db.isMapReduce ? 'value.' : '')+config.db.indexedFilters[i]);
 	}
 
-	logger.info('Getting filter counts: '+JSON.stringify(options)+' '+JSON.stringify(filters));
+	for( var i = 0; i < filters.length; i++ ) {
+		filterNames.push(filters[i].replace(/.*\./, ''));
+		filterParts.push(filters[i].split('.'));
+	}
 
-	// query and respond only with the count fields
-	collection.find(options, filters).limit(LIMIT).toArray(function(err, items) {
-		if( err ) return callback(err);
-		callback(null, items.length, getFilters(items, query.filters));
-	});
+	var cur = collection.mapReduce(
+		function() {
+			
+			function getValues(obj, index, parts) {
+				if( index == parts.length-1 ) {
+					return obj[parts[index]];
+				} else {
+					obj = obj[parts[index]];
+					index++;
+					return getValues(obj, index, parts);
+				}
+			}
+
+			var i, values, j, item = {};
+			for( i = 0; i < filterNames.length; i++ ) {
+				values = getValues(this, 0, filterParts[i]);
+				item[filterNames[i]] = {};
+
+
+				if( typeof values == 'string' ) {
+					item[filterNames[i]][values] = 1;
+				} else if ( Array.isArray(values) ) {
+					for( j = 0; j < values.length; j++ ) {
+						item[filterNames[i]][values[j]] = 1;
+						if( j == MAX_FILTERS ) break;
+					}
+				}
+			}
+
+			emit(null, item);
+		},
+		function(id, items) {
+			var result = {}, item, i, j, filter, key;
+
+			if( items.length == 0 ) {
+				for( i = 0; i < filterNames.length; i++ ) {
+					result[filterNames[i]] = {};
+				}
+				return result;
+			} else {
+				result = items[0];
+			}
+
+			for( i = 1; i < items.length; i++ ) {
+				item = items[i];
+				for( j = 0; j < filterNames.length; j++ ) {
+					filter = item[filterNames[j]];
+
+					for( key in filter ) {
+						if( !result[filterNames[j]][key] ) {
+							result[filterNames[j]][key] = filter[key];
+						} else {
+							result[filterNames[j]][key] += filter[key];
+						}
+					}
+				}
+			}
+
+			return result;
+		},
+		{
+			out : {
+				inline: 1
+			},
+			query : query,
+			scope : {
+				filterNames : filterNames,
+				filterParts : filterParts,
+				MAX_FILTERS : 50
+			},
+			finalize : function(key, result){
+				var arr, i;
+				for( filter in result ) {
+					arr = [];
+					for( value in result[filter] ) {
+						arr.push({
+							filter : value,
+							count : result[filter][value]
+						})
+					}
+
+					arr.sort(function(a, b){
+						if( a.count > b.count ) return 1; 
+						if( a.count < b.count ) return -1;
+						return 0;
+					});
+
+					result[filter] = arr;
+				}
+				return result;
+			}
+		},
+		function(err, result) {
+			if( err ) return callback(err);
+			else if( result.length == 0 ) callback(null, {});
+			else callback(null, result[0].value);
+		}
+	);
 }
 
 
@@ -573,135 +721,12 @@ function sortItems(items) {
 	logger.info('sort complete');
 }
 
-// find all filters for query
-function getFilters(items, currentFilters) {
-	logger.info("Aggergating results for filter counts");
-	
-	var resp = createFilterHash(items, currentFilters);
-
-	var filters = resp.filters;
-	
-	// now turn into array and sort by count
-	var array;
-	for( var filter in filters ) {
-		array = [];
-		
-		// create
-		for( var key in filters[filter] ) {
-			array.push({filter: key, count: filters[filter][key]});
-		}
-		
-		// sort
-		array.sort(function(a,b) {
-			return b.count - a.count;
-		});
-		
-		filters[filter] = array;
-	}
-	
-	// 	check to see if any array is empty and throw it out
-	for( var filter in filters ) {
-		if( filters[filter].length == 0 ) delete filters[filter];
-	}
-	
-	logger.info("Aggergation complete");
-	return {
-		filters : filters,
-		truncated : resp.truncated
-	};
-}
-
-function createFilterHash(items, currentFilters) {
-	var count = 0;
-
-
-	var filters = {}, item, value;
-	
-	// get the attributes we care about from the config file
-	for( var i = 0; i < config.db.indexedFilters.length; i++ ) {
-		filters[config.db.indexedFilters[i]] = {};
-	}
-
-	// loop over all result items
-	for( var i = 0; i < items.length; i++ ) {
-		item = items[i];
-		
-		// for each result item, check for filters we care about
-		for( var filter in filters ) {
-
-			// now see if it's a nested filter, only supporting one level
-			// and nested 
-			if ( filter.match(/.*\..*/) ) {
-				var parts = filter.split(".");
-				var subFilter = item[parts[0]];
-				
-				if( subFilter && (subFilter instanceof Array) ) {
-					for( var j = 0; j < subFilter.length; j++ ) {
-						addFilter(filters, currentFilters, subFilter[j][parts[1]], filter);
-						count++;
-						if( count > MAX_FILTER_COUNT ) {
-							return {filters: filters, truncated: true};
-						}
-					}
-				}
-				
-			} else {
-				addFilter(filters, currentFilters, item[filter], filter);
-				count++;
-				if( count > MAX_FILTER_COUNT ) {
-					return {filters: filters, truncated: true};
-				}
-			}
-			
-		}
-	}
-
-	return {filters: filters, truncated: false};
-}
-
-function addFilter(filters, currentFilters, attrValue, filter) {
-	
-	// does this item have the filter and is it an array
-	if( attrValue && (attrValue instanceof Array)  ) {
-		
-		// loop through the filters array and increment the filters count
-		for( var j = 0; j < attrValue.length; j++ ) {
-			value = attrValue[j];
-			
-			// if it's in the current filters, ignore
-			if( hasFilter(filter, value, currentFilters) ) continue;
-			
-			// add to count
-			if( filters[filter][value] ) filters[filter][value]++;
-			else filters[filter][value] = 1;
-		}
-		
-	} else if( attrValue ) {
-
-		value = attrValue;
-		
-		// if it's in the current filters, ignore
-		if( hasFilter(filter, value, currentFilters) ) return;
-		
-		// add to count
-		if( filters[filter][value] ) filters[filter][value]++;
-		else filters[filter][value] = 1;
-	}
-}
-
-// see if the filter/value is in the current list of filters
-function hasFilter(filter, value, currentFilters) {
-	for( var i = 0; i < currentFilters.length; i++ ) {
-		if( currentFilters[i][filter] == value ) return true;
-	}
-	return false;
-}
-
 // clear the record of any blacklisted attributes
 // parse any stringified attributes
 function cleanRecord(item) {
 	if( !item ) return {};
 
+	// TODO: make this part of the query response
 	if( config.db.blacklist ) {
 		for( var i = 0; i < config.db.blacklist.length; i++ ) {
 			if( item[config.db.blacklist[i]] ) delete item[config.db.blacklist[i]];

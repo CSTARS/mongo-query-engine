@@ -1,8 +1,9 @@
 /**
  * Super simple in-memory cache
+ *  -> TODO: replace with cache control headers
  **/
 var cache = {};
-var MAX_ITEMS = 1000;
+var MAX_ITEMS = 100;
 var MAX_AGE = 1000*60*60;
 var INTERVAL = 1000*60*15;
 
