@@ -162,7 +162,9 @@ exports.getItem = function(req, callback) {
 	// take the first query parameter and retrieve and item by the id;
 	var options = {};
 	for( var key in req.query ) {
-		if( key == "_id" ) options._id = ObjectId(req.query._id);
+		// mapreduce keys are probably strings
+		// TODO: should have an option flag to set the id as BSON or whatever
+		if( key == "_id" && !config.db.isMapReduce ) options._id = ObjectId(req.query._id);
 		else options[key] = req.query[key];
 	}
 	
@@ -173,8 +175,16 @@ exports.getItem = function(req, callback) {
 			return callback(err);
 		}
 
+		var item = result[0];
+		if( config.db.isMapReduce ) {
+			item = { _id : result[0]._id };
+			for( var key in result[0].value ) {
+				item[key] = result[0].value[key];
+			}
+		}
+
 		logger.info('Main collection query success');
-		callback(null, cleanRecord(result[0]));
+		callback(null, cleanRecord(item));
 	});
 }
 
