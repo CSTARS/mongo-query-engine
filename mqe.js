@@ -174,6 +174,9 @@ exports.getItem = function(req, callback) {
 			logger.error(err);
 			return callback(err);
 		}
+		if( result.length == 0 ) {
+			return callback(null, {error:true, message:'Invalid Id: '+req.query[key]});
+		}
 
 		var item = result[0];
 		if( config.db.isMapReduce ) {
