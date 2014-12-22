@@ -1,6 +1,4 @@
-if( !window.CERES ) window["CERES"] = {};
-
-CERES.mqe = (function(){
+window.MQE = (function(){
 	
 	var defaultPage = "";
 	var DEFAULT_SEARCH = {

@@ -1,4 +1,4 @@
-Handlebars.registerHelper('ceres-form-multiselect', function(items, options) {
+Handlebars.registerHelper('mqe-form-multiselect', function(items, options) {
   var out = "<ul>";
   for(var i=0, l=items.length; i<l; i++) {
 	  if( items[i] != "__value__") {
@@ -11,7 +11,7 @@ Handlebars.registerHelper('ceres-form-multiselect', function(items, options) {
   return out+"</ul>";
 });
 
-Handlebars.registerHelper('ceres-form-multiradio', function(block, options) {
+Handlebars.registerHelper('mqe-form-multiradio', function(block, options) {
 	  var out = "<ul>";
 	  for(var i=0, l=block.values.length; i<l; i++) {
 		  out += "<li><label class='checkbox'><input type='radio' name='"+block.id+"'> "+block.values[i]+"</label></li>";
@@ -22,7 +22,7 @@ Handlebars.registerHelper('ceres-form-multiradio', function(block, options) {
 /**
  * Requires Handlebars.js and Bootstrap
  */
-CERES.form = (function(){
+MQE.form = (function(){
 	
 	var text = [
 	            '<div class="form-group" id="{{prefix}}-{{key}}-group">',
@@ -62,7 +62,7 @@ CERES.form = (function(){
 					'<label>{{label}}</label>',
 					'{{#if help}}<span class="help-block">{{help}}</span>{{/if}}',
 					'<ul id="{{prefix}}-{{key}}" placeholder="{{label}}" >',
-						'{{#ceres-form-multiselect values}}{{/ceres-form-multiselect}}'
+						'{{#mqe-form-multiselect values}}{{/mqe-form-multiselect}}'
 					'</ul>',
 				'</div>'
 	].join('');
@@ -72,7 +72,7 @@ CERES.form = (function(){
    					'<label>{{label}}</label>',
    					'{{#if help}}<span class="help-block">{{help}}</span>{{/if}}',
    					'<ul id="{{prefix}}-{{key}}" placeholder="{{label}}" >',
-   						'{{#ceres-form-multiradio block}}{{/ceres-form-multiradio}}',
+   						'{{#mqe-form-multiradio block}}{{/mqe-form-multiradio}}',
    					'</ul>',
    				'</div>'
    	].join('');

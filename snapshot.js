@@ -2,6 +2,9 @@
  * Use zombie.js to take a snapshot of a page for search bot crawlability.
  * Run on seperate thread for safty.
  *
+ * Your page needs to set window.__mqe_lploaded flag when landing page loads
+ * Check that window.__mqe_lpready isn't set, if so, fire.
+ *
  * NOTE: DO NOT USE CONSOLE.LOG IN HERE!!!
  *  this process communicates to the server using stdout, so you will mess 
  *  with the generated output.  This is bad.
@@ -29,22 +32,14 @@ function ready() {
 	console.log(html);
 }
 
-//var url = "http://"+config.server.host;
-
 
 browser = new Browser();
 try {
 	browser.visit(url, function () {
-		if( !browser.window.CERES ) {
-			browser.window.CERES = {
-				mqe : {}
-			};
-		}
-
-		if( browser.window.CERES.mqe._lploaded ) {
+		if( browser.window.__mqe_lploaded ) {
 			ready();
 		} else {
-			browser.window.CERES.mqe.lpready = function() {
+			browser.window.__mqe_lpready = function() {
 				ready();
 			};
 		}

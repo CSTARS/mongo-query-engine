@@ -3,7 +3,6 @@
  */
 var MongoClient = require('mongodb').MongoClient, db, collection, config;
 var ObjectId = require('mongodb').ObjectID;
-var extend = require('extend');
 var cache = require('./cache');
 
 var LIMIT = 100000;
