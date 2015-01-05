@@ -286,7 +286,7 @@ if( config.import && config.import.module ) {
             runImport();
         }, config.import.interval);
 
-        // run importer at certain times... can use wildcard "*" from hour
+    // run importer at certain times... can use wildcard "*" from hour
     } else if ( config.import.hour && config.import.minute ) {
 
         setInterval(function(){

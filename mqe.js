@@ -130,6 +130,18 @@ exports.getDatabase = function() {
 	return db;
 }
 
+
+// just return the total number of results for a query
+exports.filterCountsQuery = function(query, callback) {
+	if( !db || !collection ) {
+		logger.error('no database connection for mqe.getResults()');
+		callback({message:"no database connection"});
+	}
+
+	var options = getOptionsFromQuery(query);
+	collection.count(options, callback);
+}
+
 exports.getResults = function(req, callback) {
 	if( !db || !collection ) {
 		logger.error('no database connection for mqe.getResults()');
@@ -138,18 +150,7 @@ exports.getResults = function(req, callback) {
 	
 	var query = queryParser(req);
 
-	checkCache(query, function(err, result) {
-		// if cache err, let console know, but continue on
-		if( err ) logger.error(err);
-		
-		// if cache hit, return
-		if( result ) {
-			callback(null, result);
-			return;
-		}
-		
-		filterQuery(query, callback);
-	});
+	filterQuery(query, callback);
 }
 
 exports.getItem = function(req, callback) {
@@ -362,6 +363,7 @@ function queryParser(req) {
 	logger.info('Query parsed: '+JSON.stringify(query));
 	return query;
 }
+exports.queryParser = queryParser;
 
 // check the cached collection for the query, if exsits return
 // otherwise send null
@@ -398,8 +400,7 @@ exports.clearCache = function() {
 }
 
 
-// performs just a filter query
-function filterQuery(query, callback) {	
+function getOptionsFromQuery(query) {
 	if( config.db.isMapReduce ) {
 		var obj, i;
 		for( i = 0; i < query.filters.length; i++ ) {
@@ -427,6 +428,10 @@ function filterQuery(query, callback) {
 			}
 		}
 	}
+
+	for( var i = 0; i < query.filters.length; i++ ) {
+		findDates(query.filters[i]);
+	}
 	
 	if( query.filters.length > 0 ) {
 		options["$and"] = query.filters;
@@ -436,6 +441,15 @@ function filterQuery(query, callback) {
 		options['$text'] = {'$search': query.text.toLowerCase()};
 	}
 
+	return options;
+}
+
+// performs just a filter query
+function filterQuery(query, callback) {	
+	logger.info("Running filters only query: "+JSON.stringify(query));
+
+	var options = getOptionsFromQuery(query);
+	
 	// going from mongo to json is VERY slow.  And when you return everything it's even slower
 	// Here is the fix for now.
 	//    - call full query only on selected range
@@ -522,6 +536,10 @@ exports.requestToQuery = function(req) {
 		}
 	}
 	
+	for( var i = 0; i < query.filters.length; i++ ) {
+		findDates(query.filters[i]);
+	}
+
 	if( query.filters.length > 0 ) options["$and"] = query.filters;
 
 	if( query.text && query.text.length > 0 ) {
@@ -536,6 +554,21 @@ exports.requestToQuery = function(req) {
 		filters : filters
 	}
 }
+
+// replace ISO dates strings with date objects
+				
+				
+var dateRegex = /\d\d\d\d-\d\d-\d\dT\d\d:\d\d:.*Z/;
+function findDates(obj) {
+	for( var key in obj ) {
+		if( typeof obj[key] == 'object' ) {
+			findDates(obj[key]);
+		} else if ( typeof obj[key] == 'string' && obj[key].match(dateRegex) ) {
+			obj[key] = new Date(obj[key]);
+		}
+	}
+}
+
 
 // find a sorted range of responsed without returned the entire dataset
 function rangedQuery(options, query, callback) {
@@ -680,8 +713,8 @@ function filterCounts(query, callback) {
 					}
 
 					arr.sort(function(a, b){
-						if( a.count > b.count ) return 1; 
-						if( a.count < b.count ) return -1;
+						if( a.count > b.count ) return -1; 
+						if( a.count < b.count ) return 1;
 						return 0;
 					});
 

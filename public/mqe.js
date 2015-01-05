@@ -79,19 +79,36 @@ window.MQE = (function(){
 	
 	function _updatePageContent(hash) {
 		if ( cPage == "search" ) {
-			_updateSearch(hash);
+			updateSearch(hash);
 		} else if ( cPage == resultPage ) {
 			_updateResult(hash);
 		}
 	}
 	
-	function _updateSearch(hash) {
+	function updateSearch(hash) {
 		$(window).trigger("search-start-event");
 
 		// set this for the back button
 		lastSearchHash = hash;
 		
+		cQuery = getSearchObject(hash);
+		cRest = getRestUrl(cQuery);
 
+		$.get(cRest,
+			function(data) {
+				$(window).trigger("search-update-event",[data]);  
+			}
+		);
+	}
+
+	function getRestUrl(query) {
+		return host+'/rest/query?text='+cQuery.text + 
+				'&filters=' + encodeURIComponent(JSON.stringify(cQuery.filters)) + 
+				'&start=' + (cQuery.page*cQuery.itemsPerPage) +
+				'&end=' + ((cQuery.page+1)*cQuery.itemsPerPage);
+	}
+
+	function getSearchObject(hash) {
 		var search = $.extend(true, {}, DEFAULT_SEARCH);
 		
 		for( var i = 1; i < hash.length; i++ ) {
@@ -133,18 +150,8 @@ window.MQE = (function(){
 		} catch(e) {
 			console.log(e);
 		}
-		
-		cQuery = search;
-		cRest = host+'/rest/query?text='+search.text + 
-				'&filters=' + encodeURIComponent(JSON.stringify(search.filters)) + 
-				'&start=' + (search.page*search.itemsPerPage) +
-				'&end=' + ((search.page+1)*search.itemsPerPage);
-		
-		$.get(cRest,
-			function(data) {
-				$(window).trigger("search-update-event",[data]);  
-			}
-		);
+
+		return search;
 	}
 	
 	function _updateResult(hash) {
@@ -207,7 +214,10 @@ window.MQE = (function(){
 		getDefaultQuery : getDefaultQuery,
 		getResultPage : getResultPage,
 		setDefaultFilter : setDefaultFilter,
-		getRestLink : getRestLink
+		getRestLink : getRestLink,
+		updateSearch : updateSearch,
+		getSearchObject : getSearchObject,
+		getRestUrl : getRestUrl
 	};
 	
 })();
