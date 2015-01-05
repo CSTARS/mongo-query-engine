@@ -102,10 +102,10 @@ window.MQE = (function(){
 	}
 
 	function getRestUrl(query) {
-		return host+'/rest/query?text='+cQuery.text + 
-				'&filters=' + encodeURIComponent(JSON.stringify(cQuery.filters)) + 
-				'&start=' + (cQuery.page*cQuery.itemsPerPage) +
-				'&end=' + ((cQuery.page+1)*cQuery.itemsPerPage);
+		return host+'/rest/query?text='+query.text + 
+				'&filters=' + encodeURIComponent(JSON.stringify(query.filters)) + 
+				'&start=' + (query.page*query.itemsPerPage) +
+				'&end=' + ((query.page+1)*query.itemsPerPage);
 	}
 
 	function getSearchObject(hash) {
