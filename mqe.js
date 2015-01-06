@@ -166,6 +166,7 @@ exports.getItem = function(req, callback) {
 		// TODO: should have an option flag to set the id as BSON or whatever
 		if( key == "_id" && !config.db.isMapReduce ) options._id = ObjectId(req.query._id);
 		else options[key] = req.query[key];
+		break;
 	}
 	
 	logger.info('Querying main collection: '+JSON.stringify(options));

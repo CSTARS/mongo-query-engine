@@ -157,12 +157,10 @@ window.MQE = (function(){
 	function _updateResult(hash) {
 		$.get(host+'/rest/get?'+resultQueryParameter+'='+hash[1],
 			function(data) {
+				
 				// make sure something was returned...
-				var error = true;
-				for( var key in data ) {
-					error = false;
-					break;
-				}
+				var error = false;
+				if( data.error ) error = true;
 
 				$(window).trigger("result-update-event",[data, error]);  
 			}
