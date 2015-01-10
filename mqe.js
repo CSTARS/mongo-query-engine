@@ -68,8 +68,6 @@ function connect(callback, quitOnFailure) {
 
 
 function startMongo(callback) {
-	logger.info("here");
-
 	// fork to mongod process
 	var exec = require('child_process').exec;
 	function puts(error, stdout, stderr) { 
@@ -444,6 +442,7 @@ function getOptionsFromQuery(query) {
 
 	return options;
 }
+exports.getOptionsFromQuery = getOptionsFromQuery;
 
 // performs just a filter query
 function filterQuery(query, callback) {	
@@ -731,6 +730,7 @@ function filterCounts(query, callback) {
 		}
 	);
 }
+exports.filterCounts = filterCounts;
 
 
 function sortItems(items) {
