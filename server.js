@@ -1,9 +1,6 @@
 var express = require('express');
-var passport = require('passport');
 var compression = require('compression');
 var bodyParser = require('body-parser');
-var cookieParser = require('cookie-parser');
-var session = require('cookie-session');
 var http = require('http');
 var morgan = require('morgan');
 
@@ -37,14 +34,12 @@ if( config.auth ) {
     auth = require(config.auth.script);
 }
 
-// setup passport in case the webserver wants authentication setup
 app.use(compression());
-app.use(cookieParser()); 
+app.use(bodyParser.json()); // get information from html forms
+//app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(session({ secret: config.server.cookieSecret || 'peopleareverywhereyouknow' }));
 app.use(morgan('combined',{stream: log.getStream()}));
-app.use(passport.initialize());
-app.use(passport.session());
+
     
 // setup cors
 require('./lib/cors');
