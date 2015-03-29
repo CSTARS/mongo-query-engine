@@ -44,22 +44,21 @@ app.use(morgan('combined',{stream: log.getStream()}));
 // setup cors
 require('./lib/cors');
 
-// import search engine optimization module
-var seo = require('./lib/seo.js');
-app.use(seo.escapedFragments);
-
 // set the auth endpoints
 if( config.auth ) auth.init(app, passport, config);
 
 // serve the mqe js
 app.use("/mqe", express.static(__dirname+"/public"));
-    
 
 
 // load config and initialize engine
 try {
     mongo.init(function() {
         global.mqe = require('./lib/mqe');
+
+        // import search engine optimization module
+        var seo = require('./lib/seo.js');
+        app.use(seo.escapedFragments);
 
         bootstrap();
     });
