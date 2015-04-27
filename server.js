@@ -10,7 +10,6 @@ if( process.argv.length < 3 ) {
     process.exit();
 }
 
-var config = require(process.argv[2]);
 global.appConfig = config;
 
 var mongo = require('./lib/mongo');
@@ -40,7 +39,7 @@ app.use(bodyParser.json()); // get information from html forms
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(morgan('combined',{stream: log.getStream()}));
 
-    
+
 // setup cors
 require('./lib/cors');
 
@@ -77,8 +76,7 @@ function bootstrap() {
     // once the database connection is made, bootstrap the webserver
     var webserver = require(config.server.script);
     webserver.bootstrap();
-    
+
     http.createServer(app).listen(config.server.localport);
     logger.info("MQE is up and running at http://"+config.server.host+":"+config.server.localport);
 }
-
