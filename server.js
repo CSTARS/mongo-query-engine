@@ -10,6 +10,7 @@ if( process.argv.length < 3 ) {
     process.exit();
 }
 
+var config = require(process.argv[2]);
 global.appConfig = config;
 
 var mongo = require('./lib/mongo');
