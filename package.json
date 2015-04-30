@@ -10,7 +10,7 @@
     "extend": "*",
     "express-ie-cors": "*",
     "winston": "*",
-    "zombie": "*",
+    "zombie": "3.1.1",
     "compression": "~1.0.10",
     "morgan": "~1.2.2",
     "body-parser": "^1.12.0"
