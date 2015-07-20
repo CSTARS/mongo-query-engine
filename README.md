@@ -67,4 +67,11 @@ exports.server = {
 	// server module to bootstrap
 	script : "/path/to/your/server/server.js"
 }
+
+exports.logging = {
+	dir : "/var/log/myapp",
+	
+	// max log size
+	maxsize : 10485760
+}
 ```
