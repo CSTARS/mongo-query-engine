@@ -68,17 +68,13 @@ Here is on overview:
 	  remoteport : 80,
 
 	  // local port on machine
-	  localport : 3003,
+	  localport : 3003
+	},
+  logging = {
+  	dir : "/var/log/myapp",
 
-	  // remote hosts that are allowed to access this sites mqe
-	  allowedDomains : ["testnode.com","localhost","192.168.1.113"],
-	}
-}
-
-exports.logging = {
-	dir : "/var/log/myapp",
-	
-	// max log size
-	maxsize : 10485760
+  	// max log size
+  	maxsize : 10485760
+  }
 }
 ```
