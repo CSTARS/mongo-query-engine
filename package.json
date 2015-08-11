@@ -1,6 +1,6 @@
 {
   "name": "mongo-query-engine",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Justin Merz <jrmerz@ucdavis.edu>",
   "description": "Restful, filter based, queryable middleware for express",
   "dependencies": {
@@ -9,7 +9,6 @@
     "express-ie-cors": "^0.9.4",
     "mongodb": "^2.0.40",
     "morgan": "~1.2.2",
-    "phantomjs": "https://github.com/Medium/phantomjs.git#v2.0.0-alpha",
     "winston": "^1.0.1"
   }
 }
