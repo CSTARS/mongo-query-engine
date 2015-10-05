@@ -7,9 +7,10 @@ var bodyParser = require('body-parser');
 var morgan = require('morgan');
 
 var mqe, logger, config, app, database, collection;
-var callback;
+var callback, setup;
 
-module.exports.init = function(setup, cb) {
+module.exports.init = function(s, cb) {
+  setup = s;
   callback = cb;
 
   if( !setup.app ) {
@@ -56,7 +57,7 @@ module.exports.init = function(setup, cb) {
   // load config and initialize engine
   if( setup.mongo ) { // we already have a mongo connection
     mongo.setConfig({config: config, logger: logger});
-    mongo.initIndexes(onDbReady);
+    mongo.initIndexes(setup.mongo, onDbReady);
   } else { // we need to create a mongo connection
     mongo.init({config: config, logger: logger}, onDbReady);
   }
@@ -72,7 +73,8 @@ function onDbReady(db, collect) {
     config : config,
     collection: collection,
     app : app,
-    logger : logger
+    logger : logger,
+    process : setup.process
   });
 
   // import search engine optimization module

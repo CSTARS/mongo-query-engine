@@ -5,7 +5,7 @@ Restful, free text and filter based, API and backend using MongoDB
 
 The MongoQueryEngine (MQE) is library you can use to add middleware to your express application.  The MQE provides a query layer for items stored in MongoDB.  The Rest interface provides both filter based expressions as well as free text search.  The interface also provides pagination.  Finally there is a small helper jQuery library that can be loaded to use with your fontend.  The library helps with query creation and parsing as well as app routing.  Finally, the MQE adds SEO support.
 
-#### Starting MQE Application
+# Starting MQE Application
 To add the MQE middleware to your app simply add app the following to your express app.
 ```
 var express = require('express');
@@ -29,7 +29,7 @@ mqeLib.init({
 );
 ```
 
-#### config
+# config
 The MQE uses an config.js file to specify various options for the MQE application.  Theres parameters include, database configuration and express configuration.
 
 Here is on overview:
@@ -78,3 +78,29 @@ Here is on overview:
   }
 }
 ```
+
+## Post Process Responses
+
+You post process the 'get' and 'query' responses by adding additional config to mqeLib.init(). Example:
+
+```
+mqeLib.init({
+    config: config,
+    app: app,
+    express: express,
+    process : {
+      get : function(params, item, callback) {
+        // do stuff here
+        callback(item);
+      },
+      query : function(params, items, callback) {
+        // do stuff here
+        callback(items);
+      }
+    }
+});
+```
+
+As you see in the example above, each process function will be handed the query
+parameters from the request, the item or items in the response and a callback
+for when you are finished.
