@@ -1,6 +1,6 @@
 {
   "name": "mongo-query-engine",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "author": "Justin Merz <jrmerz@ucdavis.edu>",
   "description": "Restful, filter based, queryable middleware for express",
   "dependencies": {
