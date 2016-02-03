@@ -85,7 +85,6 @@ function onDbReady(db, collect) {
     config: config,
     logger : logger
   });
-  app.use(seo.escapedFragments);
 
   logger.info('***MQE is READY!***');
 
