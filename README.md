@@ -34,13 +34,10 @@ The MQE uses an config.js file to specify various options for the MQE applicatio
 
 Here is on overview:
 ```
-{
-	db : { // config for MongoDB
-	  // connection string for the database
-	  url             : "mongodb://localhost:27017/wcga",
 
+{ // main 
 	  // collection where the queryable items are stored
-	  mainCollection  : "myDataCollection",
+	  collection  : "myDataCollection",
 
 	  // primary filters.  these filters will have indexes created for theme as well as have remaining
 	  // counts show in queries.   These attributes are probably your 'suggestions' for further filtering.
@@ -53,29 +50,46 @@ Here is on overview:
 	  // attributes will be combined into that index and ensured on start.
 	  textIndexes       : ['title','description','organization','anotherAttribute'],
 
-	  // attributes that should not be returned in the response objects
-	  blacklist : ['_id', 'md5','secret'],
+	  // default projection
+	  projection : {
+			_id : 0, 
+			md5 : 0,
+			secret : 0
+		},
 
-	  // mark this flag if you mainCollection is the result of a MapReduce opperation.  MQE will handle the marshalling
+	  // mark this flag if you collection is the result of a MapReduce opperation.  MQE will handle the marshalling
 	  // of the 'value' namespace.
-	  isMapReduce     : true
-	},
-	server : {
-	  // server host url
-	  host : "localhost",
+	  isMapReduce     : true,
+		
+		// set to false to disable CORS access
+		allowCrossDomain : true,
+		
+		// when generating the sitemap.xml file, information is used.
+		// if not provided, a sitemap.xml file will not be served.
+		seo : {
+			// host you are serving from
+			host : 'http://localhost:3000',
+			
+			// if you want to use another (non-hash) parameter in url
+			// sitemap will show: [host]/[parameterformat][result_id]
+			// parameterformat defaults to: #result/
+			parameterFormat : '?result=',
+		},
+		
+		// set custom endpoints
+		rest : {
+			get : '/package/get',
+			query : '/package/query'
+		},
+		
+		
+		// enable logging
+		logging: {
+			dir : "/var/log/myapp",
 
-	  // port outside world goes to.  most likely 80
-	  remoteport : 80,
-
-	  // local port on machine
-	  localport : 3003
-	},
-  logging = {
-  	dir : "/var/log/myapp",
-
-  	// max log size
-  	maxsize : 10485760
-  }
+			// max log size
+			maxsize : 10485760
+		}
 }
 ```
 
