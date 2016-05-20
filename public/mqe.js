@@ -155,6 +155,8 @@ window.MQE = (function(){
 	}
 
 	function _updateResult(hash) {
+		$(window).trigger("result-start-event");
+
 		$.get(host+'/mqe/get?'+resultQueryParameter+'='+hash[1],
 			function(data) {
 
